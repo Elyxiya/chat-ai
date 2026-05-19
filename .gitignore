@@ -1,0 +1,67 @@
+# ============================================================
+# AI-Native Chat System - Git Ignore
+# ============================================================
+
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+# ── Build Outputs ──────────────────────────────────────────────
+dist/
+build/
+.next/
+output/
+
+# ── Environment & Secrets ──────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── TypeScript ──────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── IDE & Editor ────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Test & Coverage ────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── Database & ORM ──────────────────────────────────────────────
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ── Docker & DevOps ────────────────────────────────────────────
+.docker/
+
+# ── Temporary / Cache ─────────────────────────────────────────
+.cache/
+.turbo/
+.parcel-cache/
+
+# ── Prisma (generated client) ──────────────────────────────────
+# Uncomment if you want to commit the generated Prisma client
+# Otherwise it will be regenerated on `npm install`
+# apps/api/node_modules/.prisma/client/
+
+# ── Monorepo lock file ──────────────────────────────────────────
+# If using a monorepo-level lock file
+# pnpm-lock.yaml
+# yarn.lock
+# package-lock.json
