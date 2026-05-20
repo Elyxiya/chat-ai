@@ -11,9 +11,6 @@ import { ApiResponse, fail, ResultCode } from '../modules/common/result';
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'all-exceptions.filter.ts:13',message:'AllExceptionsFilter caught',data:{exceptionType:(exception as Error).constructor.name,exceptionMessage:(exception as Error).message,exceptionStack:(exception as Error).stack},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const env = process.env.NODE_ENV || 'development';

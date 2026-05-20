@@ -18,56 +18,57 @@ export class MemoryService {
   async addShortTermMemory(userId: string, message: AgentMessage): Promise<void> {
     const key = `memory:short:${userId}`;
     const serialized = JSON.stringify({ ...message, id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}` });
-
-    await this.redis.lpush(key, serialized);
-    await this.redis.ltrim(key, 0, 99);
-    await this.redis.expire(key, SHORT_TERM_TTL);
+    try {
+      await this.redis.lpush(key, serialized);
+      await this.redis.ltrim(key, 0, 99);
+      await this.redis.expire(key, SHORT_TERM_TTL);
+    } catch (err: any) {
+      this.logger.warn(`[${userId}] addShortTermMemory failed (Redis unavailable): ${err.message}`);
+    }
   }
 
   async getShortTermMemory(userId: string, limit = 50): Promise<any[]> {
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'memory.service.ts:27',message:'getShortTermMemory start',data:{userId,limit},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const key = `memory:short:${userId}`;
     try {
       const raw = await this.redis.lrange(key, 0, limit - 1);
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'memory.service.ts:29',message:'lrange result',data:{userId,limit,rawLength:raw.length,rawFirstItem:raw[0]},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      const parsed = raw.map((r, idx) => {
+      const parsed = raw.map((r) => {
         try {
           return JSON.parse(r);
-        } catch (e: any) {
-          // #region debug log
-          fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'memory.service.ts:31',message:'JSON.parse FAILED',data:{userId,index:idx,rawValue:r,error:e.message},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          throw e;
+        } catch {
+          return null;
         }
-      });
-      const result = parsed.reverse();
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'memory.service.ts:32',message:'getShortTermMemory success',data:{userId,resultLength:result.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return result;
+      }).filter(Boolean);
+      return parsed.reverse();
     } catch (err: any) {
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'A',location:'memory.service.ts:43',message:'getShortTermMemory ERROR',data:{userId,errorType:(err as Error).constructor.name,errorMessage:err.message,errorStack:err.stack},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      throw err;
+      this.logger.warn(`[${userId}] getShortTermMemory failed (Redis unavailable): ${err.message}`);
+      return [];
     }
   }
 
   async clearShortTermMemory(userId: string): Promise<void> {
-    await this.redis.del(`memory:short:${userId}`);
+    try {
+      await this.redis.del(`memory:short:${userId}`);
+    } catch (err: any) {
+      this.logger.warn(`[${userId}] clearShortTermMemory failed: ${err.message}`);
+    }
   }
 
   async setWorkingMemory(userId: string, key: string, value: any): Promise<void> {
-    await this.redis.set(`memory:work:${userId}:${key}`, JSON.stringify(value), WORKING_TTL * 1000);
+    try {
+      await this.redis.set(`memory:work:${userId}:${key}`, JSON.stringify(value), WORKING_TTL * 1000);
+    } catch (err: any) {
+      this.logger.warn(`[${userId}] setWorkingMemory failed: ${err.message}`);
+    }
   }
 
   async getWorkingMemory(userId: string, key: string): Promise<any | null> {
-    const raw = await this.redis.get(`memory:work:${userId}:${key}`);
-    return raw ? JSON.parse(raw) : null;
+    try {
+      const raw = await this.redis.get(`memory:work:${userId}:${key}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err: any) {
+      this.logger.warn(`[${userId}] getWorkingMemory failed: ${err.message}`);
+      return null;
+    }
   }
 
   async storeLongTermMemory(

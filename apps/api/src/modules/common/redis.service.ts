@@ -7,15 +7,12 @@ export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
   constructor() {
-    const rawPass = process.env.REDIS_PASSWORD;
-    const pass = rawPass === '' || rawPass === undefined || rawPass === null ? undefined : rawPass;
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'redis.service.ts:10',message:'Redis config',data:{rawPass,pass,REDIS_PASSWORD:process.env.REDIS_PASSWORD},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    const rawPass = process.env.REDIS_PASSWORD?.trim();
+    const password = rawPass ? rawPass : undefined;
     this.client = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
       port: Number(process.env.REDIS_PORT) || 6379,
-      password: pass,
+      password: password,
       retryStrategy: (times) => Math.min(times * 50, 2000),
     });
 
@@ -81,19 +78,10 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'D',location:'redis.service.ts:83',message:'Redis lrange called',data:{key,start,stop},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const result = await this.client.lrange(key, start, stop);
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'D',location:'redis.service.ts:84',message:'Redis lrange result',data:{key,resultLength:result.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return result;
     } catch (err: any) {
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'D',location:'redis.service.ts:84',message:'Redis lrange ERROR',data:{key,error:err.message,errorType:err.name},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw err;
     }
   }

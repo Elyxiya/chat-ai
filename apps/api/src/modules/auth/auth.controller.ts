@@ -9,10 +9,11 @@ import {
   Get,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, RefreshTokenDto, SendCodeDto, ResetPasswordDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, RefreshTokenDto, SendCodeDto, ResetPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { Request } from 'express';
@@ -88,14 +89,55 @@ export class AuthController {
 
   @Post('oauth/github')
   @ApiOperation({ summary: 'Initiate GitHub OAuth flow' })
-  async githubAuth() {
-    return success({ url: this.authService.getGithubAuthUrl() });
+  async githubAuth(@Body() body: { state?: string }) {
+    const state = body.state || crypto.randomBytes(16).toString('hex');
+    return success({ url: this.authService.getGithubAuthUrl(state), state });
   }
 
   @Post('oauth/github/callback')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'GitHub OAuth callback' })
-  async githubCallback(@Body() body: { code: string }) {
-    return success(await this.authService.handleGithubCallback(body.code));
+  async githubCallback(@Body() body: { code: string; state?: string }) {
+    return success(await this.authService.handleGithubCallback(body.code, body.state));
+  }
+
+  @Post('oauth/google')
+  @ApiOperation({ summary: 'Initiate Google OAuth flow' })
+  async googleAuth(@Body() body: { state?: string }) {
+    const state = body.state || crypto.randomBytes(16).toString('hex');
+    return success({ url: this.authService.getGoogleAuthUrl(state), state });
+  }
+
+  @Post('oauth/google/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  async googleCallback(@Body() body: { code: string; state?: string }) {
+    return success(await this.authService.handleGoogleCallback(body.code, body.state));
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current password' })
+  async changePassword(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
+    return success(null, 'Password changed successfully');
+  }
+
+  @Post('delete-account')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete account (requires password confirmation)' })
+  async deleteAccount(
+    @CurrentUser('id') userId: string,
+    @Body() body: { password: string },
+  ) {
+    await this.authService.deleteAccount(userId, body.password);
+    return success(null, 'Account deleted');
   }
 }

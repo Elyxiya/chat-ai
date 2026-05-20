@@ -11,9 +11,24 @@
     "dev:api": "npm run start:dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -w apps/api && npm run build -w apps/web",
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "dev": "concurrently --names \"API,WEB\" --prefix-colors \"cyan,magenta\" \"npm run dev:api\" \"npm run dev:web\"",
     "lint": "npm run lint -w apps/api && npm run lint -w apps/web",
-    "test": "npm run test -w apps/api"
+    "test": "npm run test -w apps/api",
+    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "db:push": "npm run db:push -w apps/api",
+    "db:generate": "npm run db:generate -w apps/api",
+    "db:studio": "npm run db:studio -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:restart": "docker-compose restart",
+    "docker:logs": "docker-compose logs -f",
+    "docker:build": "docker-compose build --no-cache",
+    "docker:clean": "docker-compose down -v --remove-orphans",
+    "setup": "npm install && npm run db:generate -w apps/api",
+    "check": "npm run typecheck && npm run lint"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

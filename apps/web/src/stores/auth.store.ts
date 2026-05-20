@@ -12,7 +12,7 @@ interface AuthState {
 
   login: (identifier: string, password: string) => Promise<void>;
   register: (data: { username: string; email: string; password: string; nickname?: string }) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (reason?: 'expired' | 'manual') => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   checkAuth: () => Promise<void>;
 }
@@ -27,13 +27,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
 
       login: async (identifier, password) => {
-        // #region debug log
-        fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'auth.store.ts:30',message:'login start',data:{identifier},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const res: any = await authApi.login(identifier, password);
-        // #region debug log
-        fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'auth.store.ts:31',message:'login response',data:{resKeys:Object.keys(res),resHasData:!!res.data,resAccessToken:res.accessToken?.substring(0,20),resDataAccessToken:res.data?.accessToken?.substring(0,20)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const data = res.data as AuthTokens;
         set({
           user: data.user,
@@ -54,16 +48,14 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      logout: async () => {
+      logout: (reason?: 'expired' | 'manual') => {
         const { refreshToken } = get();
-        if (refreshToken) {
-          try {
-            await authApi.logout(refreshToken);
-          } catch {
-            // ignore
-          }
-        }
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+        if (refreshToken) {
+          authApi.logout(refreshToken).catch(() => {});
+        }
+        const params = reason === 'expired' ? '?reason=expired' : '';
+        window.location.href = `/login${params}`;
       },
 
       setTokens: (accessToken, refreshToken) => {

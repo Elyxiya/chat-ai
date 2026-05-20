@@ -57,12 +57,28 @@ flowchart TB
 
 ## 功能特性
 
-- **即时通讯**：私聊、群聊，通过 WebSocket 实现实时消息
-- **AI Agent**：ReAct + Plan-and-Execute 推理，工具编排，记忆管理
-- **DeepSeek**：V3（快速）+ R1（深度推理）双模型支持
-- **RAG**：基于向量搜索（pgvector）的知识库
-- **OAuth2 + JWT**：安全的身份认证，支持 Token 刷新
-- **Docker**：全容器化部署
+- **即时通讯**：私聊、群聊、频道，通过 WebSocket 实现实时消息
+- **AI Agent**：ReAct + Plan-and-Execute 推理，14+ 工具（搜索、天气、时间、计算等），记忆管理
+- **DeepSeek**：V3（快速）+ R1（深度推理）双模型支持，流式 SSE 输出
+- **RAG**：基于向量搜索（pgvector）的知识库，支持全文检索
+- **OAuth2 + JWT**：GitHub / Google OAuth，安全的身份认证，支持 Token 刷新
+- **通知系统**：实时推送，好友请求、提及、消息通知
+- **文件上传**：图片、文档、音频，支持预览和发送
+- **消息反应**：表情回应，支持回复消息
+- **深色模式**：支持浅色/深色/跟随系统三档主题
+- **Docker**：全容器化部署，Nginx 反向代理
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 前端 | React 18, TypeScript, Vite, Tailwind CSS, Zustand, Socket.io-client |
+| 后端 | NestJS 10, TypeScript, Prisma |
+| 数据库 | PostgreSQL 16, Redis 7 |
+| 向量数据库 | pgvector |
+| LLM | DeepSeek V3 + R1 |
+| 容器化 | Docker, Docker Compose, Nginx |
+| 持续集成 | GitHub Actions |
 
 ## 快速开始
 
@@ -80,30 +96,19 @@ cp .env.example .env
 # 编辑 .env，填入你的 DeepSeek API Key
 ```
 
-### 2. 启动基础设施服务
+### 2. 一键启动所有服务
 
 ```bash
-docker-compose up -d postgres redis minio
+# 使用 Docker Compose 启动完整环境
+npm run docker:up
+
+# 或本地开发模式
+npm run setup    # 安装依赖 + 生成 Prisma Client
+npm run docker:up # 启动数据库和中间件
+npm run dev      # 同时启动 API 和 Web
 ```
 
-### 3. 启动后端
-
-```bash
-cd apps/api
-npm install
-npx prisma db push
-npm run start:dev
-```
-
-### 4. 启动前端
-
-```bash
-cd apps/web
-npm install
-npm run dev
-```
-
-### 5. 访问地址
+### 3. 访问地址
 
 - 前端：http://localhost:5173
 - API：http://localhost:3000
@@ -111,10 +116,24 @@ npm run dev
 
 ## 开发指南
 
+### 根目录脚本（monorepo）
+
+```bash
+npm run dev           # 同时启动 API 和 Web（热重载）
+npm run build         # 构建所有应用
+npm run docker:up     # 启动 Docker 服务
+npm run docker:down   # 停止 Docker 服务
+npm run docker:logs   # 查看 Docker 日志
+npm run docker:clean  # 清理 Docker 卷（重置数据库）
+npm run db:push       # 推送 Prisma schema 到数据库
+npm run db:generate   # 生成 Prisma Client
+npm run db:studio     # 打开 Prisma Studio
+npm run check         # 类型检查 + Lint
+```
+
 ### 后端
 
 ```bash
-cd apps/api
 npm run start:dev     # 热重载开发服务器
 npm run lint          # 代码检查
 npm run test          # 单元测试
@@ -124,9 +143,9 @@ npx prisma studio     # 数据库可视化工具
 ### 前端
 
 ```bash
-cd apps/web
-npm run dev           # 开发服务器
+npm run dev           # 开发服务器（http://localhost:5173）
 npm run build         # 生产构建
+npm run preview       # 预览生产构建
 ```
 
 ## API 接口
@@ -139,6 +158,10 @@ npm run build         # 生产构建
 | POST | /api/v1/auth/login | 登录 |
 | POST | /api/v1/auth/refresh | 刷新 Token |
 | POST | /api/v1/auth/logout | 登出 |
+| POST | /api/v1/auth/oauth/github | GitHub OAuth |
+| POST | /api/v1/auth/oauth/google | Google OAuth |
+| POST | /api/v1/auth/change-password | 修改密码 |
+| POST | /api/v1/auth/delete-account | 删除账户 |
 
 ### 聊天
 
@@ -148,6 +171,7 @@ npm run build         # 生产构建
 | POST | /api/v1/chat/sessions | 创建会话 |
 | GET | /api/v1/chat/sessions/:id/messages | 获取消息 |
 | POST | /api/v1/chat/sessions/:id/messages | 发送消息 |
+| POST | /api/v1/chat/sessions/:id/reactions | 添加表情反应 |
 
 ### Agent
 
@@ -167,17 +191,27 @@ npm run build         # 生产构建
 | POST | /api/v1/knowledge/bases/:kbId/text | 添加文本内容 |
 | GET | /api/v1/knowledge/search | 知识检索 |
 
-## 技术栈
+### 通知
 
-| 层级 | 技术 |
-|------|------|
-| 前端 | React 18, TypeScript, Vite, Tailwind CSS, Zustand |
-| 后端 | NestJS 10, TypeScript, Prisma |
-| 数据库 | PostgreSQL 16, Redis 7 |
-| 向量数据库 | pgvector |
-| LLM | DeepSeek V3 + R1 |
-| 容器化 | Docker, Docker Compose |
-| 持续集成 | GitHub Actions |
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| GET | /api/v1/notifications | 获取通知列表 |
+| GET | /api/v1/notifications/unread-count | 未读数量 |
+| POST | /api/v1/notifications/:id/read | 标记已读 |
+| POST | /api/v1/notifications/read-all | 全部标记已读 |
+| DELETE | /api/v1/notifications/:id | 删除通知 |
+
+## 部署
+
+使用 Docker Compose 一键部署：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入你的 DeepSeek API Key
+docker-compose up -d
+```
+
+访问 http://localhost:8080 使用系统。
 
 ## 开源协议
 

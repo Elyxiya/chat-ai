@@ -92,6 +92,13 @@ export class ToolRegistry {
         memberIds: { type: 'array', description: '成员ID列表' },
       },
       handler: async ({ name, sessionType = 'group', memberIds = [] }, ctx) => {
+        const validMemberIds = memberIds.filter((id: string) => id !== ctx.userId);
+        const existingUsers = await this.prisma.user.findMany({
+          where: { id: { in: validMemberIds } },
+          select: { id: true },
+        });
+        const existingUserIds = new Set(existingUsers.map((u) => u.id));
+
         const session = await this.prisma.chatSession.create({
           data: {
             sessionType,
@@ -100,7 +107,9 @@ export class ToolRegistry {
             members: {
               create: [
                 { userId: ctx.userId, role: 'owner' },
-                ...memberIds.map((id: string) => ({ userId: id as string })),
+                ...validMemberIds
+                  .filter((id: string) => existingUserIds.has(id))
+                  .map((id: string) => ({ userId: id, role: 'member' })),
               ],
             },
           },
@@ -210,6 +219,81 @@ export class ToolRegistry {
           data: { userId: ctx.userId, metricType, metricValue, metadata: metadata as any },
         });
         return { recorded: true, metricType, metricValue };
+      },
+    });
+
+    this.register({
+      name: 'web_search',
+      description: '搜索互联网获取最新信息',
+      parameters: {
+        query: { type: 'string', description: '搜索关键词', required: true },
+        numResults: { type: 'number', description: '返回结果数量，默认5' },
+      },
+      handler: async ({ query, numResults = 5 }) => {
+        try {
+          const encodedQuery = encodeURIComponent(query);
+          const response = await fetch(
+            `https://ddg-api.duckduckgo.com/?q=${encodedQuery}&format=json&no_redirect=1&kp=1`,
+          );
+          const data = await response.json() as { AbstractText?: string; Results?: Array<{ Text: string; FirstURL: string }> };
+          const results = [
+            data.AbstractText ? `[摘要] ${data.AbstractText}` : '',
+            ...(data.Results || []).slice(0, numResults).map((r) => `${r.Text} (${r.FirstURL})`),
+          ].filter(Boolean);
+          return results.length > 0 ? results.join('\n') : 'No results found';
+        } catch {
+          return 'Search failed, please try again later';
+        }
+      },
+    });
+
+    this.register({
+      name: 'get_time',
+      description: '获取当前日期和时间',
+      parameters: {
+        timezone: { type: 'string', description: '时区，例如 Asia/Shanghai (默认)' },
+      },
+      handler: async ({ timezone = 'Asia/Shanghai' }) => {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('zh-CN', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          weekday: 'long',
+        });
+        return formatter.format(now);
+      },
+    });
+
+    this.register({
+      name: 'get_weather',
+      description: '查询指定城市的天气情况',
+      parameters: {
+        city: { type: 'string', description: '城市名称（中文或英文）', required: true },
+      },
+      handler: async ({ city }) => {
+        try {
+          const response = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+          const data = await response.json() as {
+            current_condition: Array<{
+              temp_C: string;
+              weatherDesc: Array<{ value: string }>;
+              humidity: string;
+              windspeedKmph: string;
+              FeelsLikeC: string;
+            }>;
+            nearest_area: Array<{ areaName: Array<{ value: string }> }>;
+          };
+          const current = data.current_condition[0];
+          const areaName = data.nearest_area?.[0]?.areaName?.[0]?.value || city;
+          return `${areaName}天气：${current.weatherDesc[0].value}，温度：${current.temp_C}°C（体感${current.FeelsLikeC}°C），湿度：${current.humidity}%，风速：${current.windspeedKmph}km/h`;
+        } catch {
+          return `Failed to get weather for ${city}, please try again`;
+        }
       },
     });
 

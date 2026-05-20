@@ -15,9 +15,6 @@ import { UserModule } from '../user/user.module';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
         const secret = config.get<string>('JWT_SECRET');
-        // #region debug log
-        fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'auth.module.ts:15',message:'JwtModule config',data:{secretExists:!!secret,secretLength:secret?.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return {
           secret: secret || 'dev_fallback_jwt_secret_change_in_production',
           signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN') || '15m' },

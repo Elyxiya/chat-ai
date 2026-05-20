@@ -204,7 +204,7 @@ model AgentMemory {
   sessionId       String?   @map("session_id")
   memoryType      String    @map("memory_type") @db.VarChar(30)
   content         Json
-  embedding       Float[]   @db.DoublePrecision
+  embedding       Unsupported("vector(1536)") @map("embedding")
   importanceScore Float     @default(0.5) @map("importance_score")
   accessCount     Int       @default(0) @map("access_count")
   expiresAt       DateTime? @map("expires_at")
@@ -313,7 +313,7 @@ model KnowledgeChunk {
   id         String    @id @default(uuid())
   kbId       String    @map("kb_id")
   content    String    @db.Text
-  embedding  Float[]   @db.DoublePrecision
+  embedding  Unsupported("vector(1536)") @map("embedding")
   chunkIndex Int       @map("chunk_index")
   metadata   Json      @default("{}")
   createdAt  DateTime  @default(now()) @map("created_at")

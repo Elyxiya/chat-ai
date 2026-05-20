@@ -33,17 +33,23 @@ apiClient.interceptors.response.use(
             return apiClient(error.config);
           }
         } catch {
-          store.logout();
-          window.location.href = '/login';
+          store.logout('expired');
         }
       } else {
-        store.logout();
-        window.location.href = '/login';
+        store.logout('expired');
       }
     }
     return Promise.reject(error);
   },
 );
+
+const noAuthClient = axios.create({
+  baseURL: API_BASE,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+export { noAuthClient };
 
 export const authApi = {
   login: (identifier: string, password: string) =>
@@ -53,7 +59,7 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     apiClient.post('/auth/refresh', { refreshToken }),
   logout: (refreshToken: string) =>
-    apiClient.post('/auth/logout', { refreshToken }),
+    noAuthClient.post('/auth/logout', { refreshToken }),
   sendCode: (email: string) =>
     apiClient.post('/auth/send-code', { email }),
   resetPassword: (data: { email: string; code: string; newPassword: string }) =>

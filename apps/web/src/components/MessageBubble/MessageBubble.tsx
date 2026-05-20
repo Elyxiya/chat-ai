@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import MarkdownIt from 'markdown-it';
 import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
@@ -9,12 +9,33 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isOwn: boolean;
+  onReaction?: (emoji: string) => void;
+  onReply?: (message: ChatMessage) => void;
 }
 
-export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, onReaction, onReply }: MessageBubbleProps) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [showReactions, setShowReactions] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+        setShowReactions(false);
+      }
+    };
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
+
   const content = useMemo(() => {
     if (message.isRecalled) {
       return (
@@ -43,8 +64,8 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   }, [message]);
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative`}>
+      <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
         {!isOwn && message.sender && (
           <div className="flex items-center gap-2 mb-1 px-1">
             <img
@@ -89,7 +110,50 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
               ))}
             </div>
           )}
+          {!isOwn && (
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-border transition-all"
+            >
+              <svg className="w-3.5 h-3.5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+              </svg>
+            </button>
+          )}
         </div>
+
+        {/* Reaction & more menu */}
+        {showMenu && (
+          <div className="absolute z-10 mt-1 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
+            <button
+              onClick={() => { setShowReactions(!showReactions); setShowMenu(false); }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
+            >
+              <span>Add Reaction</span>
+            </button>
+            <button
+              onClick={() => { onReply && onReply(message); setShowMenu(false); }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
+            >
+              <span>Reply</span>
+            </button>
+          </div>
+        )}
+
+        {/* Reaction picker */}
+        {showReactions && (
+          <div className="absolute z-10 mt-1 bg-surface border border-border rounded-full shadow-lg px-2 py-1 flex items-center gap-1">
+            {QUICK_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => { onReaction && onReaction(emoji); setShowReactions(false); }}
+                className="text-lg hover:scale-125 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

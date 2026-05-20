@@ -85,6 +85,17 @@ export class ResetPasswordDto {
   newPassword: string;
 }
 
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsString()
+  currentPassword: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsStrongPassword()
+  newPassword: string;
+}
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;

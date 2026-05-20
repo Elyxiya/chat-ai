@@ -1,13 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
+import { useToast } from '@/components/Toast/ToastContainer';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, register } = useAuthStore();
+  const { show } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (searchParams.get('reason') === 'expired') {
+      show('Session expired, please sign in again', 'warning');
+    }
+  }, []);
 
   const [form, setForm] = useState({
     identifier: '',
@@ -29,14 +38,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       if (isLogin) {
-        // #region debug log
-        fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'LoginPage.tsx:login_attempt',message:'login attempt',data:{identifier:form.identifier},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         await login(form.identifier, form.password);
       } else {
-        // #region debug log
-        fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'LoginPage.tsx:register_attempt',message:'register attempt',data:{username:form.username,email:form.email},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         await register({
           username: form.username,
           email: form.email,
@@ -45,9 +48,6 @@ export default function LoginPage() {
       }
       navigate('/');
     } catch (err: any) {
-      // #region debug log
-      fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'LoginPage.tsx:catch',message:'auth error',data:{errMessage:err.message,errResponse:err.response?.data,errStatus:err.response?.status},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setError(err.response?.data?.message || err.message || 'An error occurred');
     } finally {
       setLoading(false);

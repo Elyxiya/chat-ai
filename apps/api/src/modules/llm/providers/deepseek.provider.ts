@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Readable } from 'stream';
 import axios from 'axios';
 import { LLMProvider, ChatPromptInput, LLMOptions } from '../interfaces/llm-provider.interface';
+
+// Node.js 18+ can convert a Readable to a Web ReadableStream
+type WebReadableStream = ReadableStream<Uint8Array>;
 
 @Injectable()
 export class DeepSeekProvider implements LLMProvider {
@@ -67,6 +71,7 @@ export class DeepSeekProvider implements LLMProvider {
     }
 
     const model = this.getModel(options);
+    const timeoutMs = options?.timeout ?? 120000;
 
     try {
       const response = await axios.post(
@@ -86,29 +91,61 @@ export class DeepSeekProvider implements LLMProvider {
             Authorization: `Bearer ${this.apiKey}`,
           },
           responseType: 'stream',
-          timeout: 120000,
+          signal: AbortSignal.timeout(timeoutMs),
         },
       );
 
-      const stream = response.data;
+      const nodeStream = response.data as unknown as NodeJS.ReadableStream;
+      const webStream = Readable.toWeb(nodeStream as unknown as Readable) as WebReadableStream;
+      const reader = webStream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      for await (const chunk of stream) {
-        const text = chunk.toString();
-        const lines = text.split('\n').filter((l: string) => l.startsWith('data: '));
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') return;
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) yield content;
-          } catch {
-            // skip malformed chunks
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const data = trimmed.slice(6).trim();
+            if (data === '[DONE]') return;
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) yield content;
+            } catch {
+              // skip malformed chunks
+            }
           }
         }
+
+        // flush remaining buffer
+        if (buffer.trim()) {
+          const trimmed = buffer.trim();
+          if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
+            try {
+              const parsed = JSON.parse(trimmed.slice(6).trim());
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) yield content;
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
       }
     } catch (error: any) {
+      if (error.name === 'TimeoutError' || error.code === 'ERR_CANCELED') {
+        this.logger.warn(`DeepSeek stream timeout after ${timeoutMs}ms`);
+        throw new Error('AI request timed out');
+      }
       this.logger.error(`DeepSeek stream error: ${error.message}`);
       throw new Error(`DeepSeek stream failed: ${error.message}`);
     }
@@ -123,7 +160,7 @@ export class DeepSeekProvider implements LLMProvider {
       const response = await axios.post(
         `${this.baseUrl}/embeddings`,
         {
-          model: 'deepseek-embed',
+          model: 'deepseek-embedding',
           input: text,
         },
         {

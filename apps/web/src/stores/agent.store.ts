@@ -3,17 +3,35 @@ import { AgentMessage, AgentResponse } from '@/types';
 import { agentApi } from '@/api/client';
 import { useAuthStore } from './auth.store';
 
+interface ToolCallEntry {
+  name: string;
+  args: Record<string, any>;
+  result?: any;
+  success?: boolean;
+  timestamp: number;
+}
+
+interface ReasoningStep {
+  step: number;
+  reasoning: string;
+}
+
 interface AgentState {
   isAgentMode: boolean;
   messages: AgentMessage[];
   streamingContent: string;
   isStreaming: boolean;
+  typingSpeed: number;
   mode: 'react' | 'planner' | 'reasoner';
-  toolCalls: Array<{ name: string; args: Record<string, any>; result?: any; success?: boolean }>;
+  toolCalls: ToolCallEntry[];
+  reasoningSteps: ReasoningStep[];
+  currentStep: number;
   error: string | null;
   sessionId: string | null;
+  pendingMessage: string | null;
 
   setMode: (mode: 'react' | 'planner' | 'reasoner') => void;
+  setTypingSpeed: (speed: number) => void;
   sendMessage: (content: string) => Promise<void>;
   sendStreamMessage: (content: string) => Promise<void>;
   stopStream: () => void;
@@ -27,12 +45,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   messages: [],
   streamingContent: '',
   isStreaming: false,
+  typingSpeed: 8,
   mode: 'react',
   toolCalls: [],
+  reasoningSteps: [],
+  currentStep: 0,
   error: null,
   sessionId: null,
+  pendingMessage: null,
 
   setMode: (mode) => set({ mode }),
+  setTypingSpeed: (speed) => set({ typingSpeed: speed }),
 
   sendMessage: async (content) => {
     const { messages } = get();
@@ -62,82 +85,166 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   sendStreamMessage: async (content) => {
-    const { messages } = get();
+    const { messages, isStreaming, pendingMessage } = get();
+    // Deduplication: ignore if same message is already streaming or pending
+    if (isStreaming) return;
+    if (pendingMessage === content) return;
     const userMsg: AgentMessage = { role: 'user', content, timestamp: Date.now() };
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     set({
       messages: [...messages, userMsg],
       isAgentMode: true,
       isStreaming: true,
       streamingContent: '',
+      toolCalls: [],
+      reasoningSteps: [],
+      currentStep: 0,
       error: null,
+      pendingMessage: content,
     });
 
     const token = useAuthStore.getState().accessToken;
 
     try {
-      const response = await fetch('/api/v1/agent/chat/stream', {
+      const response = await fetch('/api/v1/agent/chat/stream/enhanced', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: content, mode: get().mode }),
       });
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
+      let fullReasoning = '';
+      let hasFinalized = false; // guard against double-finalize from duplicate 'done'
 
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const text = decoder.decode(value);
-          const lines = text.split('\n');
+          const text = decoder.decode(value, { stream: true });
+          // split by newline but preserve empty lines for robustness
+          const lines = text.split(/\r?\n/);
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'chunk') {
-                  fullContent += data.content;
-                  set({ streamingContent: fullContent });
-                } else if (data.type === 'done') {
-                  const assistantMsg: AgentMessage = {
-                    role: 'assistant',
-                    content: fullContent,
-                    timestamp: Date.now(),
-                  };
+          for (const rawLine of lines) {
+            if (!rawLine.startsWith('data: ')) continue;
+            const line = rawLine.slice(6).trim();
+            if (!line) continue;
+
+            try {
+              const event = JSON.parse(line);
+
+              switch (event.type) {
+                case 'start':
+                  set({ sessionId: event.sessionId });
+                  break;
+
+                case 'step':
+                  set({ currentStep: event.data?.step || 0 });
+                  break;
+
+                case 'thinking':
+                  fullReasoning += `\n[Step ${event.data?.step || '?'}] ${event.data?.reasoning || ''}`;
                   set((state) => ({
-                    messages: [...state.messages, assistantMsg],
-                    isStreaming: false,
-                    streamingContent: '',
+                    reasoningSteps: [
+                      ...state.reasoningSteps.filter((s) => s.step !== event.data?.step),
+                      { step: event.data?.step || state.reasoningSteps.length + 1, reasoning: event.data?.reasoning || '' },
+                    ],
                   }));
-                } else if (data.type === 'error') {
-                  set({ error: data.message, isStreaming: false });
+                  break;
+
+                case 'tool_call':
+                  set((state) => ({
+                    toolCalls: [
+                      ...state.toolCalls,
+                      { name: event.data?.name || '', args: event.data?.args || {}, timestamp: Date.now() },
+                    ],
+                  }));
+                  break;
+
+                case 'tool_result': {
+                  set((state) => ({
+                    toolCalls: state.toolCalls.map((tc, idx) =>
+                      idx === state.toolCalls.length - 1
+                        ? {
+                            ...tc,
+                            result: event.data?.result?.result,
+                            success: event.data?.result?.success,
+                          }
+                        : tc,
+                    ),
+                  }));
+                  break;
                 }
-              } catch {
-                // skip malformed
+
+                case 'chunk':
+                  if (!hasFinalized) {
+                    fullContent += event.data?.content || '';
+                    set({ streamingContent: fullContent });
+                  }
+                  break;
+
+                case 'final':
+                  if (!hasFinalized) {
+                    fullContent = event.data?.content || fullContent;
+                    fullReasoning = event.data?.reasoning || fullReasoning;
+                    set({ streamingContent: fullContent });
+                    hasFinalized = true;
+                  }
+                  break;
+
+                case 'done': {
+                  if (hasFinalized || fullContent) {
+                    const assistantMsg: AgentMessage = {
+                      role: 'assistant',
+                      content: fullContent,
+                      timestamp: Date.now(),
+                      metadata: {
+                        reasoning: fullReasoning,
+                        toolCalls: get().toolCalls,
+                      },
+                    };
+                    set((state) => ({
+                      messages: [...state.messages, assistantMsg],
+                      isStreaming: false,
+                      streamingContent: '',
+                      pendingMessage: null,
+                    }));
+                    hasFinalized = true;
+                  } else {
+                    set({ isStreaming: false, streamingContent: '', pendingMessage: null });
+                  }
+                  break;
+                }
+
+                case 'error':
+                  set({ error: event.data?.message || 'Unknown error', isStreaming: false, pendingMessage: null });
+                  break;
               }
+            } catch {
+              // skip malformed JSON
             }
           }
         }
       }
     } catch (err: any) {
-      set({ error: err.message, isStreaming: false });
+      set({ error: err.message, isStreaming: false, pendingMessage: null });
     }
   },
 
   stopStream: () => {
-    set({ isStreaming: false, streamingContent: '' });
+    set({ isStreaming: false, streamingContent: '', pendingMessage: null });
   },
 
-  clearMessages: () => set({ messages: [], streamingContent: '' }),
+  clearMessages: () => set({ messages: [], streamingContent: '', toolCalls: [], reasoningSteps: [], pendingMessage: null }),
 
   clearMemory: async () => {
     await agentApi.clearMemory();
-    set({ messages: [], streamingContent: '' });
+    set({ messages: [], streamingContent: '', toolCalls: [], reasoningSteps: [] });
   },
 
   loadHistory: async () => {

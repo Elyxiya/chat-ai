@@ -4,6 +4,7 @@ export interface LLMOptions {
   maxTokens?: number;
   topP?: number;
   stop?: string[];
+  timeout?: number;
 }
 
 export interface ChatMessage {

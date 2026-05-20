@@ -79,17 +79,39 @@ export class AgentOrchestrator {
     });
   }
 
+  async *streamProcessWithEvents(userId: string, input: string, sessionId?: string, mode?: string): AsyncGenerator<{ type: string; data: any }> {
+    await this.memory.addShortTermMemory(userId, {
+      role: 'user',
+      content: input,
+      timestamp: Date.now(),
+    });
+
+    yield { type: 'start', data: { sessionId } };
+
+    const intent = await this.planner.classifyIntent(input);
+
+    const usePlanner = mode === 'planner' || intent.type === 'complex';
+    const useReasoner = mode === 'reasoner' || intent.type === 'reasoning';
+
+    if (usePlanner) {
+      for await (const event of this.planner.streamPlanAndExecuteWithEvents(userId, input, { ...intent, type: 'complex' }, sessionId)) {
+        yield event;
+      }
+    } else {
+      for await (const event of this.planner.streamReActWithEvents(userId, input, { ...intent, type: useReasoner ? 'reasoning' : intent.type }, sessionId)) {
+        yield event;
+      }
+    }
+
+    // Note: 'done' event is sent by the controller, not here.
+    // This ensures a single, consistent done event regardless of which planner path was used.
+  }
+
   async getConversationHistory(
     userId: string,
     limit = 50,
   ): Promise<any[]> {
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'B',location:'agent-orchestrator.service.ts:82',message:'getConversationHistory called',data:{userId,limit},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const result = await this.memory.getShortTermMemory(userId, limit);
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'B',location:'agent-orchestrator.service.ts:86',message:'getConversationHistory result',data:{userId,limit,resultLength:result?.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return result;
   }
 

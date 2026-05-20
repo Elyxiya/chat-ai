@@ -16,9 +16,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
   ) {
     const secret = config.get<string>('JWT_SECRET');
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d7dd50'},body:JSON.stringify({sessionId:'d7dd50',location:'jwt.strategy.ts:14',message:'JwtStrategy init',data:{secretExists:!!secret,secretLength:secret?.length,secretFirst16:secret?.substring(0,16)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,

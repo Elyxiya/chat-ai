@@ -93,19 +93,61 @@ export class AgentController {
     res.end();
   }
 
+  @Post('chat/stream/enhanced')
+  @HttpCode(HttpStatus.OK)
+  @ApiProduces('text/event-stream')
+  @ApiOperation({ summary: 'Enhanced streaming with thinking chain and tool events (SSE)' })
+  async chatStreamEnhanced(
+    @CurrentUser('id') userId: string,
+    @Body() body: { message: string; sessionId?: string; mode?: string },
+    @Res() res: Response,
+  ) {
+    const timeoutMs = Number(process.env.AI_STREAM_TIMEOUT) || 120000;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    res.write(`data: ${JSON.stringify({ type: 'start', sessionId: body.sessionId })}\n\n`);
+
+    try {
+      const stream = this.agentOrchestrator.streamProcessWithEvents(
+        userId,
+        body.message,
+        body.sessionId,
+        body.mode,
+      );
+
+      const timeoutSignal = AbortSignal.timeout(timeoutMs);
+
+      timeoutSignal.addEventListener('abort', () => {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Stream timed out' })}\n\n`);
+        res.end();
+      });
+
+      for await (const event of stream) {
+        if (timeoutSignal.aborted) break;
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+
+      if (!timeoutSignal.aborted) {
+        res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      }
+    } catch (error) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+    }
+
+    res.end();
+  }
+
   @Get('history')
   @ApiOperation({ summary: 'Get agent conversation history' })
   async getHistory(
     @CurrentUser('id') userId: string,
     @Query('limit') limit?: number,
   ) {
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'C',location:'agent.controller.ts:96',message:'getHistory handler called',data:{userId,limit,typeofLimit:typeof limit},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const history = await this.agentOrchestrator.getConversationHistory(userId, limit);
-    // #region debug log
-    fetch('http://127.0.0.1:7327/ingest/804a4ea0-edf2-4cdf-8542-0c7db0a68a39',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'288cad'},body:JSON.stringify({sessionId:'288cad',runId:'initial',hypothesisId:'C',location:'agent.controller.ts:103',message:'getHistory returning success()',data:{userId,historyLength:history?.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return success(history);
   }
 

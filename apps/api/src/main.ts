@@ -42,6 +42,10 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
+  app.getHttpAdapter().get('/health', (_, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);

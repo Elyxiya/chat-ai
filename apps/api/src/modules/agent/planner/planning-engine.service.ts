@@ -139,6 +139,85 @@ export class PlanningEngine {
     while (stepCount < this.MAX_REACT_STEPS) {
       stepCount++;
 
+      let fullResponse = '';
+      try {
+        const thoughtPrompt = this.buildReActPrompt(input, observation, memory, context, tools, stepCount);
+        for await (const chunk of this.llmProvider.chatStream(thoughtPrompt, {
+          model: intent.type === 'reasoning' ? 'r1' : 'v3',
+          temperature: 0.7,
+          maxTokens: 1000,
+        })) {
+          fullResponse += chunk;
+        }
+      } catch (err: any) {
+        this.logger.error(`[${userId}] LLM stream error at step ${stepCount}: ${err.message}`);
+        yield `处理请求时遇到问题：${err.message}`;
+        return;
+      }
+
+      const parsed = this.parseThought(fullResponse);
+      reasoning += `\n[Step ${stepCount}] ${parsed.reasoning}`;
+
+      if (parsed.action?.type === 'final') {
+        yield parsed.action.result ?? '';
+
+        await this.memory.addShortTermMemory(userId, {
+          role: 'assistant',
+          content: parsed.action.result ?? '',
+          timestamp: Date.now(),
+          metadata: { reasoning },
+        });
+        return;
+      }
+
+      if (parsed.action?.type === 'tool') {
+        const toolCall: ToolCall = {
+          id: uuidv4(),
+          name: parsed.action.toolName ?? '',
+          arguments: parsed.action.args ?? {},
+        };
+
+        let toolResult: { success: boolean; result?: any; error?: string };
+        try {
+          toolResult = await this.executeToolCall(toolCall, userId);
+        } catch (err: any) {
+          toolResult = { success: false, error: err.message };
+        }
+
+        observation = `工具 "${toolCall.name}" 执行${toolResult.success ? '成功' : '失败'}。结果：${JSON.stringify(toolResult.result || toolResult.error)}`;
+
+        memory.push({
+          role: 'assistant',
+          content: `Action: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`,
+          timestamp: Date.now(),
+        });
+      } else if (stepCount >= this.MAX_REACT_STEPS) {
+        const fallback = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
+        yield fallback;
+        return;
+      }
+    }
+  }
+
+  async *streamReActWithEvents(
+    userId: string,
+    input: string,
+    intent: IntentClassification,
+    sessionId?: string,
+  ): AsyncGenerator<{ type: string; data: any }> {
+    const memory = await this.memory.getShortTermMemory(userId, 20);
+    const tools = this.toolRegistry.getToolDescriptions();
+    const context = await this.buildContext(userId, input);
+
+    let observation = '';
+    let stepCount = 0;
+    let reasoning = '';
+
+    while (stepCount < this.MAX_REACT_STEPS) {
+      stepCount++;
+
+      yield { type: 'step', data: { step: stepCount, status: 'thinking' } };
+
       const thoughtPrompt = this.buildReActPrompt(input, observation, memory, context, tools, stepCount);
 
       let fullResponse = '';
@@ -153,6 +232,8 @@ export class PlanningEngine {
       const parsed = this.parseThought(fullResponse);
       reasoning += `\n[Step ${stepCount}] ${parsed.reasoning}`;
 
+      yield { type: 'thinking', data: { step: stepCount, reasoning: parsed.reasoning } };
+
       if (parsed.action?.type === 'final') {
         await this.memory.addShortTermMemory(userId, {
           role: 'assistant',
@@ -161,7 +242,7 @@ export class PlanningEngine {
           metadata: { reasoning },
         });
 
-        yield parsed.action.result ?? '';
+        yield { type: 'final', data: { content: parsed.action.result ?? '', reasoning } };
         return;
       }
 
@@ -172,16 +253,66 @@ export class PlanningEngine {
           arguments: parsed.action.args ?? {},
         };
 
+        yield { type: 'tool_call', data: { name: toolCall.name, args: toolCall.arguments } };
+
         const toolResult = await this.executeToolCall(toolCall, userId);
         observation = `工具 "${toolCall.name}" 执行${toolResult.success ? '成功' : '失败'}。结果：${JSON.stringify(toolResult.result || toolResult.error)}`;
+
+        yield { type: 'tool_result', data: { name: toolCall.name, result: toolResult } };
 
         memory.push({
           role: 'assistant',
           content: `Action: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`,
           timestamp: Date.now(),
         });
+      } else if (stepCount >= this.MAX_REACT_STEPS) {
+        // No action could be determined after max steps — use reasoning as fallback answer
+        const fallback = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
+        yield { type: 'final', data: { content: fallback, reasoning } };
+        return;
       }
     }
+  }
+
+  async *streamPlanAndExecuteWithEvents(
+    userId: string,
+    input: string,
+    intent: IntentClassification,
+    sessionId?: string,
+  ): AsyncGenerator<{ type: string; data: any }> {
+    const context = await this.buildContext(userId, input);
+    const tools = this.toolRegistry.getToolDescriptions();
+
+    yield { type: 'step', data: { status: 'planning' } };
+
+    const plan = await this.createPlan(input, context, tools);
+
+    yield { type: 'plan_created', data: { steps: plan.steps.map((s) => ({ id: s.id, description: s.description, tool: s.tool })) } };
+
+    for (const step of plan.steps) {
+      if (step.status === 'pending' && step.tool) {
+        const result = await this.executeToolCall(
+          { id: uuidv4(), name: step.tool, arguments: step.args || {} },
+          userId,
+        );
+        step.result = result;
+        step.status = result.success ? 'completed' : 'failed';
+
+        yield { type: 'tool_result', data: { stepId: step.id, name: step.tool, result } };
+      }
+    }
+
+    yield { type: 'step', data: { status: 'summarizing' } };
+
+    let summaryContent = '';
+    for await (const chunk of this.llmProvider.chatStream([
+      { role: 'system', content: 'You are a helpful assistant. Summarize the plan execution results concisely.' },
+      { role: 'user', content: `Original task: ${input}\n\nPlan execution:\n${plan.steps.map((s) => `[${s.status}] ${s.description}: ${s.result?.result || s.result?.error || 'N/A'}`).join('\n')}` },
+    ], { model: 'v3', temperature: 0.7 })) {
+      summaryContent += chunk;
+    }
+
+    yield { type: 'final', data: { content: summaryContent, reasoning: plan.steps.map((s) => `[${s.status}] ${s.description}`).join('\n') } };
   }
 
   async planAndExecute(
@@ -410,9 +541,23 @@ ${context}
   }
 
   private parseThought(response: string): { reasoning: string; action?: { type: 'tool' | 'final'; toolName?: string; args?: any; result?: string } } {
-    const thoughtMatch = response.match(/思考[：:]\s*(.+?)(?=\n行动[：:]|最终答案[：:])/s);
-    const toolMatch = response.match(/行动[：:]\s*(\w+)\s*\(\s*(\{[^}]*\})?\s*\)/s);
-    const finalMatch = response.match(/最终答案[：:]\s*(.+)/s);
+    let text = response;
+
+    // Strip DeepSeek R1 <think>...</think> block so it doesn't pollute reasoning/parsing
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+    // Handle DeepSeek R1 <final_answer>...</final_answer>
+    const r1FinalMatch = text.match(/<final_answer>\s*([\s\S]*?)\s*<\/final_answer>/i);
+    if (r1FinalMatch) {
+      return {
+        reasoning: '',
+        action: { type: 'final', result: r1FinalMatch[1].trim() },
+      };
+    }
+
+    const thoughtMatch = text.match(/思考[：:]\s*(.+?)(?=\n行动[：:]|最终答案[：:])/s);
+    const toolMatch = text.match(/行动[：:]\s*(\w+)\s*\(\s*(\{[^}]*\})?\s*\)/s);
+    const finalMatch = text.match(/最终答案[：:]\s*(.+)/s);
 
     return {
       reasoning: thoughtMatch?.[1]?.trim() || '',

@@ -13,7 +13,9 @@ export default function AgentChatPage() {
     isStreaming,
     mode,
     error,
+    typingSpeed,
     setMode,
+    setTypingSpeed,
     sendMessage,
     sendStreamMessage,
     stopStream,
@@ -93,6 +95,21 @@ export default function AgentChatPage() {
           </svg>
         </button>
 
+        {/* Speed control */}
+        <div className="flex items-center gap-1.5 group relative" title={`Typing speed: ${typingSpeed}ms`}>
+          <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="50"
+            value={50 - typingSpeed}
+            onChange={(e) => setTypingSpeed(50 - Number(e.target.value))}
+            className="w-16 h-1 appearance-none bg-border rounded-full cursor-pointer accent-primary-500 opacity-80 hover:opacity-100 transition-opacity"
+          />
+        </div>
+
         <button
           onClick={() => setShowTools(!showTools)}
           className={`p-2 rounded-lg transition-colors ${showTools ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-600' : 'hover:bg-bg text-text-secondary'}`}
@@ -157,11 +174,12 @@ export default function AgentChatPage() {
                   ) : (
                     <div className="bg-surface border border-border px-4 py-3 rounded-2xl rounded-bl-md">
                       {msg.metadata?.reasoning && showThinking && (
-                        <ThinkingChain reasoning={msg.metadata.reasoning} />
+                        <ThinkingChain />
                       )}
                       <StreamingText
                         content={msg.content}
                         className="text-sm whitespace-pre-wrap"
+                        isStreaming={false}
                       />
                     </div>
                   )}
@@ -173,14 +191,19 @@ export default function AgentChatPage() {
             ))}
 
             {/* Streaming */}
-            {isStreaming && streamingContent && (
+            {isStreaming && (
               <div className="flex justify-start">
-                <div className="max-w-[70%] bg-surface border border-border px-4 py-3 rounded-2xl rounded-bl-md">
+                <div className="max-w-[70%] bg-surface border border-border px-4 py-3 rounded-2xl rounded-bl-md space-y-2">
+                  {showThinking && <ThinkingChain />}
                   <StreamingText
                     content={streamingContent}
                     className="text-sm whitespace-pre-wrap"
+                    typingSpeed={typingSpeed}
+                    isStreaming={true}
                   />
-                  <span className="inline-block w-2 h-4 bg-primary-500 animate-pulse ml-1" />
+                  {!streamingContent && (
+                    <span className="inline-block w-2 h-4 bg-primary-500 animate-pulse ml-1" />
+                  )}
                 </div>
               </div>
             )}
@@ -239,15 +262,13 @@ export default function AgentChatPage() {
           <div className="w-80 border-l border-border p-4 overflow-y-auto scrollbar-thin">
             {showThinking && (
               <div className="mb-6">
-                <h3 className="text-sm font-semibold mb-3">Reasoning Chain</h3>
-                {messages.map((msg, idx) =>
-                  msg.metadata?.reasoning ? (
-                    <div key={idx} className="mb-3 p-3 bg-bg rounded-lg border border-border">
-                      <p className="text-xs text-text-secondary mb-1">Message {idx + 1}</p>
-                      <p className="text-sm whitespace-pre-wrap">{msg.metadata.reasoning}</p>
-                    </div>
-                  ) : null,
-                )}
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-sm font-semibold">Reasoning Chain</h3>
+                  {isStreaming && (
+                    <span className="inline-block w-2 h-2 rounded-full bg-primary-400 animate-pulse" />
+                  )}
+                </div>
+                <ThinkingChain />
               </div>
             )}
             {showTools && <ToolCallLog />}
