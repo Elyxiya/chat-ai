@@ -18,7 +18,10 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    console.log('[Interceptor] response.data:', response.data);
+    return response.data;
+  },
   async (error: AxiosError<{ message: string }>) => {
     if (error.response?.status === 401) {
       const store = useAuthStore.getState();
@@ -53,17 +56,17 @@ export { noAuthClient };
 
 export const authApi = {
   login: (identifier: string, password: string) =>
-    apiClient.post('/auth/login', { identifier, password }),
+    noAuthClient.post('/auth/login', { identifier, password }),
   register: (data: { username: string; email: string; password: string; nickname?: string }) =>
-    apiClient.post('/auth/register', data),
+    noAuthClient.post('/auth/register', data),
   refresh: (refreshToken: string) =>
-    apiClient.post('/auth/refresh', { refreshToken }),
+    noAuthClient.post('/auth/refresh', { refreshToken }),
   logout: (refreshToken: string) =>
     noAuthClient.post('/auth/logout', { refreshToken }),
   sendCode: (email: string) =>
-    apiClient.post('/auth/send-code', { email }),
+    noAuthClient.post('/auth/send-code', { email }),
   resetPassword: (data: { email: string; code: string; newPassword: string }) =>
-    apiClient.post('/auth/reset-password', data),
+    noAuthClient.post('/auth/reset-password', data),
   me: () => apiClient.get('/auth/me'),
 };
 

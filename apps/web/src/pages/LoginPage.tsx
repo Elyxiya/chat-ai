@@ -35,10 +35,13 @@ export default function LoginPage() {
       return;
     }
 
-    setLoading(true);
+      setLoading(true);
+    console.log('[Login] Starting login request...', { identifier: form.identifier });
     try {
       if (isLogin) {
+        console.log('[Login] Calling login API...');
         await login(form.identifier, form.password);
+        console.log('[Login] Login API completed');
       } else {
         await register({
           username: form.username,
@@ -46,8 +49,11 @@ export default function LoginPage() {
           password: form.password,
         });
       }
+      fetch('http://127.0.0.1:7471/ingest/0173fd0a-42f8-4674-8fbd-edcb9bf66117',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f427d3'},body:JSON.stringify({sessionId:'f427d3',id:'log_login_nav_'+Date.now(),location:'LoginPage.tsx:before_navigate',message:'before navigate call',data:{isLogin},timestamp:Date.now(),runId:'debug',hypothesisId:'A'})}).catch(()=>{});
       navigate('/');
     } catch (err: any) {
+      console.error('[Login] Error:', err);
+      console.error('[Login] Error response:', err.response);
       setError(err.response?.data?.message || err.message || 'An error occurred');
     } finally {
       setLoading(false);

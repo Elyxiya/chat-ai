@@ -27,23 +27,27 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
 
       login: async (identifier, password) => {
+        console.log('[AuthStore] login called', { identifier });
         const res: any = await authApi.login(identifier, password);
-        const data = res.data as AuthTokens;
+        console.log('[AuthStore] login API response:', res);
+        console.log('[AuthStore] res.data:', res?.data);
+        console.log('[AuthStore] res.data.data:', res?.data?.data);
+        console.log('[AuthStore] res.data.data.user:', res?.data?.data?.user);
         set({
-          user: data.user,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
+          user: res.data.data?.user,
+          accessToken: res.data.data?.accessToken,
+          refreshToken: res.data.data?.refreshToken,
           isAuthenticated: true,
         });
+        console.log('[AuthStore] Store updated successfully');
       },
 
       register: async (data) => {
         const res: any = await authApi.register(data);
-        const tokens = res.data as AuthTokens;
         set({
-          user: tokens.user,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          user: res.data.user,
+          accessToken: res.data.accessToken,
+          refreshToken: res.data.refreshToken,
           isAuthenticated: true,
         });
       },
