@@ -11,14 +11,16 @@ import UserSearchModal from '@/components/UserSearch/UserSearchModal';
 export default function ChatLayout() {
   const navigate = useNavigate();
   const { user, accessToken, checkAuth } = useAuthStore();
-  const { connect, disconnect, loadSessions } = useChatStore();
+  const { connect, loadSessions } = useChatStore();
   const { resolvedTheme, setTheme } = useThemeStore();
   const { unreadCount, setOpen, fetchUnreadCount } = useNotificationStore();
   const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
-    if (accessToken) fetchUnreadCount();
-  }, [accessToken]);
+    if (accessToken) {
+      fetchUnreadCount();
+    }
+  }, [accessToken, fetchUnreadCount]);
 
   useEffect(() => {
     checkAuth().then(() => {
@@ -28,7 +30,7 @@ export default function ChatLayout() {
         loadSessions();
       }
     });
-  }, []);
+  }, [checkAuth, connect, loadSessions]);
 
   useEffect(() => {
     if (!accessToken) {

@@ -7,6 +7,13 @@ import { LLMProvider, ChatPromptInput, LLMOptions } from '../interfaces/llm-prov
 // Node.js 18+ can convert a Readable to a Web ReadableStream
 type WebReadableStream = ReadableStream<Uint8Array>;
 
+/** Maps effort levels: low/medium->high, xhigh->max, as per DeepSeek docs */
+const normalizeEffort = (effort?: string): string => {
+  if (effort === 'low' || effort === 'medium') return 'high';
+  if (effort === 'xhigh') return 'max';
+  return effort || 'high';
+};
+
 @Injectable()
 export class DeepSeekProvider implements LLMProvider {
   private readonly logger = new Logger(DeepSeekProvider.name);
@@ -27,6 +34,15 @@ export class DeepSeekProvider implements LLMProvider {
     return this.modelV3;
   }
 
+  /** Build the extra_body for thinking mode */
+  private buildExtraBody(options?: LLMOptions): Record<string, any> {
+    if (!options?.thinking) return {};
+    return {
+      thinking: { type: 'enabled' },
+      reasoning_effort: normalizeEffort(options.reasoningEffort),
+    };
+  }
+
   async chat(prompt: ChatPromptInput, options?: LLMOptions): Promise<string> {
     if (!this.apiKey) {
       throw new Error('DEEPSEEK_API_KEY is not configured');
@@ -35,17 +51,26 @@ export class DeepSeekProvider implements LLMProvider {
     const model = this.getModel(options);
 
     try {
+      const body: Record<string, any> = {
+        model,
+        messages: prompt,
+        stream: false,
+      };
+
+      // Thinking mode: no temperature/top_p
+      if (options?.thinking) {
+        body.extra_body = this.buildExtraBody(options);
+      } else {
+        body.temperature = options?.temperature ?? 0.7;
+        body.top_p = options?.topP;
+      }
+
+      body.max_tokens = options?.maxTokens ?? (model === this.modelR1 ? 8192 : 4096);
+      body.stop = options?.stop;
+
       const response = await axios.post(
         `${this.baseUrl}/chat/completions`,
-        {
-          model,
-          messages: prompt,
-          temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? (model === this.modelR1 ? 8192 : 4096),
-          top_p: options?.topP,
-          stop: options?.stop,
-          stream: false,
-        },
+        body,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -65,7 +90,14 @@ export class DeepSeekProvider implements LLMProvider {
     }
   }
 
-  async *chatStream(prompt: ChatPromptInput, options?: LLMOptions): AsyncGenerator<string> {
+  /**
+   * Streaming version that yields both reasoning_content and final content.
+   * Yields events: { type: 'reasoning'|'content', data: string }
+   */
+  async *chatStreamWithReasoning(
+    prompt: ChatPromptInput,
+    options?: LLMOptions,
+  ): AsyncGenerator<{ type: 'reasoning' | 'content'; data: string }> {
     if (!this.apiKey) {
       throw new Error('DEEPSEEK_API_KEY is not configured');
     }
@@ -73,18 +105,26 @@ export class DeepSeekProvider implements LLMProvider {
     const model = this.getModel(options);
     const timeoutMs = options?.timeout ?? 120000;
 
+    const body: Record<string, any> = {
+      model,
+      messages: prompt,
+      stream: true,
+    };
+
+    if (options?.thinking) {
+      body.extra_body = this.buildExtraBody(options);
+    } else {
+      body.temperature = options?.temperature ?? 0.7;
+      body.top_p = options?.topP;
+    }
+
+    body.max_tokens = options?.maxTokens ?? (model === this.modelR1 ? 8192 : 4096);
+    body.stop = options?.stop;
+
     try {
       const response = await axios.post(
         `${this.baseUrl}/chat/completions`,
-        {
-          model,
-          messages: prompt,
-          temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? (model === this.modelR1 ? 8192 : 4096),
-          top_p: options?.topP,
-          stop: options?.stop,
-          stream: true,
-        },
+        body,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -117,8 +157,13 @@ export class DeepSeekProvider implements LLMProvider {
             if (data === '[DONE]') return;
             try {
               const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) yield content;
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta?.reasoning_content) {
+                yield { type: 'reasoning', data: delta.reasoning_content };
+              }
+              if (delta?.content) {
+                yield { type: 'content', data: delta.content };
+              }
             } catch {
               // skip malformed chunks
             }
@@ -131,8 +176,13 @@ export class DeepSeekProvider implements LLMProvider {
           if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
             try {
               const parsed = JSON.parse(trimmed.slice(6).trim());
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) yield content;
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta?.reasoning_content) {
+                yield { type: 'reasoning', data: delta.reasoning_content };
+              }
+              if (delta?.content) {
+                yield { type: 'content', data: delta.content };
+              }
             } catch {
               // skip malformed
             }
@@ -151,6 +201,14 @@ export class DeepSeekProvider implements LLMProvider {
     }
   }
 
+  async *chatStream(prompt: ChatPromptInput, options?: LLMOptions): AsyncGenerator<string> {
+    for await (const event of this.chatStreamWithReasoning(prompt, options)) {
+      if (event.type === 'content') {
+        yield event.data;
+      }
+    }
+  }
+
   async embed(text: string): Promise<number[]> {
     if (!this.apiKey) {
       throw new Error('DEEPSEEK_API_KEY is not configured for embedding');
@@ -160,7 +218,7 @@ export class DeepSeekProvider implements LLMProvider {
       const response = await axios.post(
         `${this.baseUrl}/embeddings`,
         {
-          model: 'deepseek-embedding',
+          model: 'embedding-3',
           input: text,
         },
         {
@@ -175,6 +233,9 @@ export class DeepSeekProvider implements LLMProvider {
       return response.data.data?.[0]?.embedding || [];
     } catch (error: any) {
       this.logger.error(`DeepSeek embedding error: ${error.message}`);
+      if (error.response) {
+        this.logger.error(`DeepSeek embedding response: ${JSON.stringify(error.response.data)}`);
+      }
       return [];
     }
   }

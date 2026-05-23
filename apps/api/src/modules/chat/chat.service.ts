@@ -6,7 +6,6 @@ import {
   SendMessageDto,
   UpdateSessionDto,
   MessageWithSender,
-  SessionWithMembers,
 } from './dto/chat.dto';
 
 @Injectable()
@@ -41,7 +40,7 @@ export class ChatService {
       return [];
     }
 
-    const sessionIds = memberships.map((m) => m.sessionId);
+    const sessionIds = memberships.map((m: any) => m.sessionId);
 
     const recentMessages = await this.prisma.message.findMany({
       where: {
@@ -61,7 +60,7 @@ export class ChatService {
       }
     }
 
-    const sessions = memberships.map((m) => ({
+    const sessions = memberships.map((m: any) => ({
       ...m.session,
       myRole: m.role,
       myNickname: m.nickname,
@@ -69,7 +68,7 @@ export class ChatService {
       lastMessage: lastMessageBySession.get(m.sessionId) || null,
       unreadCount: lastMessageBySession.has(m.sessionId) && m.lastReadAt
         ? recentMessages.filter(
-            (msg) =>
+            (msg: any) =>
               msg.sessionId === m.sessionId &&
               msg.createdAt > (m.lastReadAt ?? new Date(0)) &&
               msg.senderId !== userId,
@@ -261,7 +260,7 @@ export class ChatService {
     });
   }
 
-  async markAsRead(userId: string, sessionId: string, lastMessageId: string) {
+  async markAsRead(userId: string, sessionId: string, _lastMessageId?: string) {
     await this.prisma.chatSessionMember.update({
       where: { sessionId_userId: { sessionId, userId } },
       data: { lastReadAt: new Date() },
@@ -454,5 +453,41 @@ export class ChatService {
     }
 
     return this.prisma.message.count({ where });
+  }
+
+  async addReaction(userId: string, messageId: string, emoji: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: { session: { include: { members: true } } },
+    });
+
+    if (!message) throw new NotFoundException('Message not found');
+
+    const isMember = message.session.members.some((m) => m.userId === userId);
+    if (!isMember) throw new ForbiddenException('Not a member of this session');
+
+    const existing = await this.prisma.messageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    });
+
+    if (existing) return existing;
+
+    return this.prisma.messageReaction.create({
+      data: { messageId, userId, emoji },
+    });
+  }
+
+  async removeReaction(userId: string, messageId: string, emoji: string) {
+    const reaction = await this.prisma.messageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    });
+
+    if (!reaction) throw new NotFoundException('Reaction not found');
+
+    await this.prisma.messageReaction.delete({
+      where: { id: reaction.id },
+    });
+
+    return { success: true };
   }
 }

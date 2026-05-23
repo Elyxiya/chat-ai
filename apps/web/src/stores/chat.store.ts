@@ -105,7 +105,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     });
 
-    socket.on('read_receipt', ({ userId, sessionId, lastMessageId }: any) => {
+    socket.on('read_receipt', ({ sessionId }: { sessionId: string; userId?: string; lastMessageId?: string }) => {
       set((state) => ({
         sessions: state.sessions.map((s) =>
           s.id === sessionId ? { ...s, unreadCount: 0 } : s,
@@ -183,8 +183,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { messages } = get();
     const msgs = messages[sessionId];
     if (!msgs?.length) return;
-    const lastMessageId = msgs[msgs.length - 1].id;
-    chatApi.markRead(sessionId, lastMessageId).catch(() => {});
+    chatApi.markRead(sessionId, msgs[msgs.length - 1].id).catch(() => {});
   },
 
   joinSession: (sessionId) => {

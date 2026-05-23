@@ -1,23 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAgentStore } from '@/stores/agent.store';
-import { useChatStore } from '@/stores/chat.store';
-import { useAuthStore } from '@/stores/auth.store';
 import ThinkingChain from '@/components/AgentPanel/ThinkingChain/ThinkingChain';
 import ToolCallLog from '@/components/AgentPanel/ToolCallLog/ToolCallLog';
 import StreamingText from '@/components/AgentPanel/StreamingText/StreamingText';
-import { agentApi } from '@/api/client';
-import { format } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
 
 export default function EnhancedAgentPage() {
-  const { user } = useAuthStore();
   const {
     messages,
     streamingContent,
     isStreaming,
     reasoningSteps,
-    toolCalls,
-    sendMessage,
     streamMessage,
     clearHistory,
   } = useAgentStore();
@@ -41,7 +33,7 @@ export default function EnhancedAgentPage() {
     const content = input.trim();
     setInput('');
     await streamMessage(content, mode === 'plan' ? 'plan-execute' : 'react');
-  }, [input, isStreaming, mode]);
+  }, [input, isStreaming, mode, streamMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -114,7 +106,7 @@ export default function EnhancedAgentPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg, i) => (
-            <div key={msg.id || i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.timestamp || i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] ${msg.role === 'user' ? 'order-2' : 'order-1'}`}>
                 {msg.role === 'user' ? (
                   <div className="px-3.5 py-2.5 bg-primary-600 text-white rounded-2xl rounded-br-md text-sm whitespace-pre-wrap">
@@ -130,7 +122,7 @@ export default function EnhancedAgentPage() {
           {streamingContent && (
             <div className="flex justify-start">
               <div className="max-w-[80%]">
-                <StreamingText text={streamingContent} />
+                <StreamingText content={streamingContent} />
               </div>
             </div>
           )}
@@ -186,7 +178,7 @@ export default function EnhancedAgentPage() {
                 <h3 className="text-sm font-medium">Tool Calls</h3>
               </div>
               <div className="p-3">
-                <ToolCallLog calls={toolCalls} />
+                <ToolCallLog />
               </div>
             </div>
           )}

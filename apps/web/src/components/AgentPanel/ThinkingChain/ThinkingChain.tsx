@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useAgentStore } from '@/stores/agent.store';
 
-export default function ThinkingChain() {
-  const { reasoningSteps, messages, isStreaming } = useAgentStore();
+export default function ThinkingChain({ steps = [] }: { steps?: { step: number; reasoning: string }[] }) {
+  const { reasoningSteps: storeSteps, messages, isStreaming } = useAgentStore();
+  const reasoningSteps = steps.length > 0 ? steps : storeSteps;
   const [expanded, setExpanded] = useState(true);
 
   const allSteps = [
@@ -10,7 +11,7 @@ export default function ThinkingChain() {
     ...messages
       .filter((m) => m.metadata?.reasoning)
       .flatMap((m) => {
-        const lines = (m.metadata.reasoning || '').trim().split('\n').filter(Boolean);
+        const lines = (m.metadata?.reasoning || '').trim().split('\n').filter(Boolean);
         return lines.map((line: string) => {
           const stepMatch = line.match(/^\[Step (\d+)\]\s*(.*)/);
           return stepMatch

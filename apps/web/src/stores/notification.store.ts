@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useAuthStore } from './auth.store';
 
 export interface Notification {
   id: string;
@@ -23,7 +24,7 @@ interface NotificationState {
   addNotification: (notification: Notification) => void;
 }
 
-export const useNotificationStore = create<NotificationState>((set, get) => ({
+export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   unreadCount: 0,
   isOpen: false,
@@ -31,11 +32,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   setOpen: (open) => set({ isOpen: open }),
 
   fetchNotifications: async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
       const res = await fetch('/api/v1/notifications', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken : ''}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       set({ notifications: data.data || [] });
@@ -43,11 +44,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   fetchUnreadCount: async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
       const res = await fetch('/api/v1/notifications/unread-count', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken : ''}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       set({ unreadCount: data.data?.count || 0 });
@@ -55,12 +56,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   markAsRead: async (id) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
       await fetch(`/api/v1/notifications/${id}/read`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken : ''}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       set((state) => ({
         notifications: state.notifications.map((n) =>
@@ -72,12 +73,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   markAllAsRead: async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
       await fetch('/api/v1/notifications/read-all', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken : ''}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       set((state) => ({
         notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
@@ -87,12 +88,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   deleteNotification: async (id) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
       await fetch(`/api/v1/notifications/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken : ''}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       set((state) => ({
         notifications: state.notifications.filter((n) => n.id !== id),

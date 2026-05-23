@@ -152,3 +152,25 @@ export interface SessionWithMembers {
   lastMessage?: MessageWithSender | null;
   unreadCount: number;
 }
+
+export class AddReactionDto {
+  @ApiProperty()
+  @IsString()
+  messageId: string;
+
+  @ApiProperty({ description: 'Emoji character' })
+  @IsString()
+  @MaxLength(10)
+  emoji: string;
+}
+
+export class RemoveReactionDto {
+  @ApiProperty()
+  @IsString()
+  messageId: string;
+
+  @ApiProperty({ description: 'Emoji character' })
+  @IsString()
+  @MaxLength(10)
+  emoji: string;
+}

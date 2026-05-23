@@ -86,7 +86,7 @@ export default function SettingsPage() {
       <div className="card p-6 space-y-4">
         <h2 className="text-lg font-semibold">Account</h2>
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
         >
           Sign Out

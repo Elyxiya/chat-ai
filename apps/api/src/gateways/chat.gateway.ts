@@ -9,7 +9,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ChatGatewayService } from './chat-gateway.service';
 
 export enum WsMessageType {
@@ -124,7 +124,7 @@ export class ChatGateway
       case WsMessageType.FILE:
       case WsMessageType.AUDIO:
       case WsMessageType.VIDEO: {
-        const { sessionId, content, contentType, metadata, mentions, replyToId } = payload.data;
+        const { sessionId, content, metadata, mentions, replyToId } = payload.data;
         const message = await this.chatGatewayService.sendMessage(
           user.id,
           sessionId,
@@ -155,7 +155,7 @@ export class ChatGateway
 
       case WsMessageType.RECALL: {
         const { messageId } = payload.data;
-        const recalled = await this.chatGatewayService.recallMessage(user.id, messageId);
+        await this.chatGatewayService.recallMessage(user.id, messageId);
 
         const msg = await this.chatGatewayService.getMessageById(messageId);
         if (msg) {

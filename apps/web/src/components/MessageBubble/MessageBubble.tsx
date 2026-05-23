@@ -132,7 +132,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
               <span>Add Reaction</span>
             </button>
             <button
-              onClick={() => { onReply && onReply(message); setShowMenu(false); }}
+              onClick={() => { if (onReply) { onReply(message); } setShowMenu(false); }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
               <span>Reply</span>
@@ -146,7 +146,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
             {QUICK_REACTIONS.map((emoji) => (
               <button
                 key={emoji}
-                onClick={() => { onReaction && onReaction(emoji); setShowReactions(false); }}
+                onClick={() => { if (onReaction) { onReaction(emoji); } setShowReactions(false); }}
                 className="text-lg hover:scale-125 transition-transform"
               >
                 {emoji}

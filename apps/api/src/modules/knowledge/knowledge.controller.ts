@@ -15,7 +15,7 @@ import { ApiTags, ApiBearerAuth, ApiConsumes, ApiOperation } from '@nestjs/swagg
 import { KnowledgeService } from './knowledge.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { CreateKbDto, AddDocumentDto, SearchKbDto } from './dto/knowledge.dto';
+import { CreateKbDto, SearchKbDto } from './dto/knowledge.dto';
 import { success } from '../common/result';
 
 @ApiTags('Knowledge')

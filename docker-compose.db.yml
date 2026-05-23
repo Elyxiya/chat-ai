@@ -4,7 +4,7 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: minichat-postgres
     restart: unless-stopped
     environment:
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
-      - "6370:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

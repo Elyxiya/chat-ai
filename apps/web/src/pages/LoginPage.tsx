@@ -16,7 +16,7 @@ export default function LoginPage() {
     if (searchParams.get('reason') === 'expired') {
       show('Session expired, please sign in again', 'warning');
     }
-  }, []);
+  }, [searchParams, show]);
 
   const [form, setForm] = useState({
     identifier: '',

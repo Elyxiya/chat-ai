@@ -3,8 +3,32 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '**.json'
+      - '**.yml'
+      - '**.yaml'
+      - 'docs/**'
+      - 'db/**'
+      - 'docker/**'
+      - 'pnpm-*.yaml'
+      - '.dockerignore'
+      - '.env.example'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '**.json'
+      - '**.yml'
+      - '**.yaml'
+      - 'docs/**'
+      - 'db/**'
+      - 'docker/**'
+      - 'pnpm-*.yaml'
+      - '.dockerignore'
+      - '.env.example'
 
 env:
   NODE_VERSION: '20'

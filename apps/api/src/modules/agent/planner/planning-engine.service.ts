@@ -6,7 +6,6 @@ import { DeepSeekProvider } from '../../llm/providers/deepseek.provider';
 import {
   IntentClassification,
   AgentResponse,
-  AgentContext,
   PlanStep,
   ExecutionPlan,
   ToolCall,
@@ -56,7 +55,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): Promise<AgentResponse> {
     const memory = await this.memory.getShortTermMemory(userId, 20);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -73,8 +72,10 @@ export class PlanningEngine {
 
       const thought = await this.llmProvider.chat(thoughtPrompt, {
         model: intent.type === 'reasoning' ? 'r1' : 'v3',
-        temperature: 0.7,
+        temperature: intent.type === 'reasoning' ? undefined : 0.7,
         maxTokens: 1000,
+        thinking: intent.type === 'reasoning',
+        reasoningEffort: intent.type === 'reasoning' ? 'high' : undefined,
       });
 
       const parsed = this.parseThought(thought);
@@ -126,7 +127,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): AsyncGenerator<string> {
     const memory = await this.memory.getShortTermMemory(userId, 20);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -140,14 +141,22 @@ export class PlanningEngine {
       stepCount++;
 
       let fullResponse = '';
+      let stepReasoning = '';
+      let parsed: ReturnType<typeof this.parseThought>;
       try {
         const thoughtPrompt = this.buildReActPrompt(input, observation, memory, context, tools, stepCount);
-        for await (const chunk of this.llmProvider.chatStream(thoughtPrompt, {
+        for await (const event of this.llmProvider.chatStreamWithReasoning(thoughtPrompt, {
           model: intent.type === 'reasoning' ? 'r1' : 'v3',
-          temperature: 0.7,
+          temperature: intent.type === 'reasoning' ? undefined : 0.7,
           maxTokens: 1000,
+          thinking: intent.type === 'reasoning',
+          reasoningEffort: intent.type === 'reasoning' ? 'high' : undefined,
         })) {
-          fullResponse += chunk;
+          if (event.type === 'reasoning') {
+            stepReasoning += event.data;
+          } else {
+            fullResponse += event.data;
+          }
         }
       } catch (err: any) {
         this.logger.error(`[${userId}] LLM stream error at step ${stepCount}: ${err.message}`);
@@ -155,8 +164,8 @@ export class PlanningEngine {
         return;
       }
 
-      const parsed = this.parseThought(fullResponse);
-      reasoning += `\n[Step ${stepCount}] ${parsed.reasoning}`;
+      parsed = this.parseThought(fullResponse);
+      reasoning += `\n[Step ${stepCount}] ${parsed.reasoning || stepReasoning}`;
 
       if (parsed.action?.type === 'final') {
         yield parsed.action.result ?? '';
@@ -190,6 +199,7 @@ export class PlanningEngine {
           role: 'assistant',
           content: `Action: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`,
           timestamp: Date.now(),
+          reasoning_content: stepReasoning,
         });
       } else if (stepCount >= this.MAX_REACT_STEPS) {
         const fallback = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
@@ -203,7 +213,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): AsyncGenerator<{ type: string; data: any }> {
     const memory = await this.memory.getShortTermMemory(userId, 20);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -221,18 +231,26 @@ export class PlanningEngine {
       const thoughtPrompt = this.buildReActPrompt(input, observation, memory, context, tools, stepCount);
 
       let fullResponse = '';
-      for await (const chunk of this.llmProvider.chatStream(thoughtPrompt, {
+      let stepReasoning = '';
+      for await (const event of this.llmProvider.chatStreamWithReasoning(thoughtPrompt, {
         model: intent.type === 'reasoning' ? 'r1' : 'v3',
-        temperature: 0.7,
+        temperature: intent.type === 'reasoning' ? undefined : 0.7,
         maxTokens: 1000,
+        thinking: intent.type === 'reasoning',
+        reasoningEffort: intent.type === 'reasoning' ? 'high' : undefined,
       })) {
-        fullResponse += chunk;
+        if (event.type === 'reasoning') {
+          stepReasoning += event.data;
+          yield { type: 'reasoning', data: { step: stepCount, content: event.data } };
+        } else {
+          fullResponse += event.data;
+        }
       }
 
       const parsed = this.parseThought(fullResponse);
-      reasoning += `\n[Step ${stepCount}] ${parsed.reasoning}`;
+      reasoning += `\n[Step ${stepCount}] ${parsed.reasoning || stepReasoning}`;
 
-      yield { type: 'thinking', data: { step: stepCount, reasoning: parsed.reasoning } };
+      yield { type: 'thinking_done', data: { step: stepCount, reasoning: parsed.reasoning || stepReasoning } };
 
       if (parsed.action?.type === 'final') {
         await this.memory.addShortTermMemory(userId, {
@@ -264,6 +282,7 @@ export class PlanningEngine {
           role: 'assistant',
           content: `Action: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`,
           timestamp: Date.now(),
+          reasoning_content: stepReasoning,
         });
       } else if (stepCount >= this.MAX_REACT_STEPS) {
         // No action could be determined after max steps — use reasoning as fallback answer
@@ -278,7 +297,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): AsyncGenerator<{ type: string; data: any }> {
     const context = await this.buildContext(userId, input);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -319,7 +338,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): Promise<AgentResponse> {
     const context = await this.buildContext(userId, input);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -363,7 +382,7 @@ export class PlanningEngine {
     userId: string,
     input: string,
     intent: IntentClassification,
-    sessionId?: string,
+    _sessionId?: string,
   ): AsyncGenerator<string> {
     const context = await this.buildContext(userId, input);
     const tools = this.toolRegistry.getToolDescriptions();
@@ -400,7 +419,12 @@ STEP-[序号]: 描述 | 工具名称 | 参数JSON
 
     const response = await this.llmProvider.chat([
       { role: 'user', content: prompt },
-    ], { model: 'v3', temperature: 0.3, maxTokens: 2000 });
+    ], {
+      model: 'v3',
+      temperature: 0.3,
+      maxTokens: 2000,
+      thinking: false,
+    });
 
     const steps: PlanStep[] = [];
     const stepRegex = /STEP-(\d+):\s*(.+?)\s*\|\s*(\w+)\s*(?:\|)?\s*(\{.*?\})?/gi;

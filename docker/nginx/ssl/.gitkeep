@@ -1,0 +1,14 @@
+# ============================================================
+# SSL Certificates Directory
+# ============================================================
+# Place your SSL certificate files here:
+#
+# - fullchain.pem   (your domain certificate + intermediate CA)
+# - privkey.pem     (your private key)
+# - chain.pem       (intermediate CA certificate, optional)
+#
+# Example with Let's Encrypt:
+#   mv /etc/letsencrypt/live/your-domain.com/fullchain.pem ./
+#   mv /etc/letsencrypt/live/your-domain.com/privkey.pem ./
+#
+# Then uncomment the HTTPS server block in conf.d/default.conf

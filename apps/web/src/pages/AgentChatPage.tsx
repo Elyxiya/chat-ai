@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
 import { useAgentStore } from '@/stores/agent.store';
 import StreamingText from '@/components/AgentPanel/StreamingText/StreamingText';
 import ThinkingChain from '@/components/AgentPanel/ThinkingChain/ThinkingChain';
 import ToolCallLog from '@/components/AgentPanel/ToolCallLog/ToolCallLog';
 
 export default function AgentChatPage() {
-  const { sessionId } = useParams<{ sessionId?: string }>();
   const {
     messages,
     streamingContent,
@@ -16,7 +14,6 @@ export default function AgentChatPage() {
     typingSpeed,
     setMode,
     setTypingSpeed,
-    sendMessage,
     sendStreamMessage,
     stopStream,
     clearMessages,
@@ -31,7 +28,7 @@ export default function AgentChatPage() {
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [loadHistory]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

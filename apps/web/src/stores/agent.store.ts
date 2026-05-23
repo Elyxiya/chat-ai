@@ -36,6 +36,8 @@ interface AgentState {
   sendStreamMessage: (content: string) => Promise<void>;
   stopStream: () => void;
   clearMessages: () => void;
+  streamMessage: (content: string, modeOverride?: string) => Promise<void>;
+  clearHistory: () => void;
   clearMemory: () => Promise<void>;
   loadHistory: () => Promise<void>;
 }
@@ -56,6 +58,24 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   setMode: (mode) => set({ mode }),
   setTypingSpeed: (speed) => set({ typingSpeed: speed }),
+  streamMessage: async (content, modeOverride) => {
+    const mode = modeOverride || get().mode;
+    set({ mode: mode as 'react' | 'planner' | 'reasoner' });
+    await get().sendStreamMessage(content);
+  },
+  clearHistory: () => {
+    set({
+      messages: [],
+      streamingContent: '',
+      toolCalls: [],
+      reasoningSteps: [],
+      currentStep: 0,
+      error: null,
+      sessionId: null,
+      pendingMessage: null,
+      isStreaming: false,
+    });
+  },
 
   sendMessage: async (content) => {
     const { messages } = get();
@@ -90,7 +110,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (isStreaming) return;
     if (pendingMessage === content) return;
     const userMsg: AgentMessage = { role: 'user', content, timestamp: Date.now() };
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     set({
       messages: [...messages, userMsg],
       isAgentMode: true,

@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { LLMProvider } from '../../llm/interfaces/llm-provider.interface';
-import { AgentContext, AgentResponse, IntentClassification } from '../types';
+import { AgentResponse } from '../types';
 import { PlanningEngine } from '../planner/planning-engine.service';
 import { MemoryService } from '../memory/memory.service';
 import { ToolRegistry } from '../tools/tool-registry.service';
@@ -123,7 +122,7 @@ export class AgentOrchestrator {
     userId: string,
     sessionId: string | undefined,
     result: AgentResponse,
-    startTime: number,
+    _startTime: number,
   ) {
     await this.memory.addShortTermMemory(userId, {
       role: 'assistant',

@@ -34,7 +34,7 @@ export interface SessionMember {
   userId?: string;
   role: string;
   nickname?: string | null;
-  user: Pick<User, 'id' | 'username' | 'avatarUrl' | 'status'>;
+  user: Pick<User, 'id' | 'username' | 'avatarUrl' | 'status' | 'nickname'>;
 }
 
 export interface ChatMessage {
@@ -75,6 +75,7 @@ export interface MessageReaction {
 }
 
 export interface AgentMessage {
+  id?: string;
   role: 'system' | 'user' | 'assistant';
   content: string;
   timestamp?: number;

@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 export default function SessionList() {
   const navigate = useNavigate();
-  const { sessions, activeSessionId, loadSessions } = useChatStore();
+  const { sessions } = useChatStore();
   const { user } = useAuthStore();
 
   const currentPath = window.location.pathname;

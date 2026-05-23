@@ -8,29 +8,40 @@
     "libs/*"
   ],
   "scripts": {
-    "dev:api": "npm run start:dev -w apps/api",
-    "dev:web": "npm run dev -w apps/web",
-    "build": "npm run build -w apps/api && npm run build -w apps/web",
-    "build:api": "npm run build -w apps/api",
-    "build:web": "npm run build -w apps/web",
-    "dev": "concurrently --names \"API,WEB\" --prefix-colors \"cyan,magenta\" \"npm run dev:api\" \"npm run dev:web\"",
-    "lint": "npm run lint -w apps/api && npm run lint -w apps/web",
-    "test": "npm run test -w apps/api",
-    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
-    "db:push": "npm run db:push -w apps/api",
-    "db:generate": "npm run db:generate -w apps/api",
-    "db:studio": "npm run db:studio -w apps/api",
-    "db:migrate": "npm run db:migrate -w apps/api",
+    "dev": "concurrently -k \"pnpm --filter ai-native-chat-api start:dev\" \"pnpm --filter ai-native-chat-web dev\"",
+    "dev:api": "pnpm --filter ai-native-chat-api start:dev",
+    "dev:web": "wait-on http://localhost:3000 && pnpm --filter ai-native-chat-web dev",
+    "build": "pnpm --filter ai-native-chat-api build && pnpm --filter ai-native-chat-web build",
+    "build:api": "pnpm --filter ai-native-chat-api build",
+    "build:web": "pnpm --filter ai-native-chat-web build",
+    "lint": "pnpm --filter ai-native-chat-api lint && pnpm --filter ai-native-chat-web lint",
+    "test": "pnpm --filter ai-native-chat-api test",
+    "typecheck": "pnpm --filter ai-native-chat-api typecheck && pnpm --filter ai-native-chat-web typecheck",
+    "db:push": "pnpm --filter ai-native-chat-api db:push",
+    "db:generate": "pnpm --filter ai-native-chat-api db:generate",
+    "db:studio": "pnpm --filter ai-native-chat-api db:studio",
+    "db:migrate": "pnpm --filter ai-native-chat-api db:migrate",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:restart": "docker-compose restart",
     "docker:logs": "docker-compose logs -f",
     "docker:build": "docker-compose build --no-cache",
     "docker:clean": "docker-compose down -v --remove-orphans",
-    "setup": "npm install && npm run db:generate -w apps/api",
-    "check": "npm run typecheck && npm run lint"
+    "setup": "pnpm install && pnpm --filter ai-native-chat-api db:generate",
+    "check": "pnpm typecheck && pnpm lint"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "esbuild",
+      "prisma"
+    ]
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "wait-on": "^8.0.5"
   }
 }

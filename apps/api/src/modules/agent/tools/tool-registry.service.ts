@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
-import { ChatService } from '../../chat/chat.service';
 import { ToolDefinition, AgentContext } from '../types';
 
 @Injectable()
@@ -34,7 +33,7 @@ export class ToolRegistry {
       parameters: {
         userId: { type: 'string', description: '用户ID', required: true },
       },
-      handler: async ({ userId }, ctx) => {
+      handler: async ({ userId }, _ctx) => {
         const user = await this.prisma.user.findUnique({
           where: { id: userId },
           select: { id: true, username: true, nickname: true, avatarUrl: true, bio: true, status: true },
@@ -97,7 +96,7 @@ export class ToolRegistry {
           where: { id: { in: validMemberIds } },
           select: { id: true },
         });
-        const existingUserIds = new Set(existingUsers.map((u) => u.id));
+        const existingUserIds = new Set(existingUsers.map((u: any) => u.id));
 
         const session = await this.prisma.chatSession.create({
           data: {
@@ -164,7 +163,7 @@ export class ToolRegistry {
             friend: { select: { id: true, username: true, avatarUrl: true, status: true } },
           },
         });
-        return friendships.map((f) => (f.userId === ctx.userId ? f.friend : f.user));
+        return friendships.map((f: any) => (f.userId === ctx.userId ? f.friend : f.user));
       },
     });
 
@@ -195,7 +194,7 @@ export class ToolRegistry {
           where: { OR: [{ userId: ctx.userId }, { friendId: ctx.userId }], status: 'accepted' },
         });
 
-        const friendIds = friendships.map((f) => (f.userId === ctx.userId ? f.friendId : f.userId));
+        const friendIds = friendships.map((f: any) => (f.userId === ctx.userId ? f.friendId : f.userId));
 
         const users = await this.prisma.user.findMany({
           where: { id: { in: friendIds }, status: 'online' },

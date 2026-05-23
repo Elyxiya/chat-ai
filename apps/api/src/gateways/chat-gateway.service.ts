@@ -100,7 +100,7 @@ export class ChatGatewayService {
     });
   }
 
-  async markRead(userId: string, sessionId: string, lastMessageId: string) {
+  async markRead(userId: string, sessionId: string, _lastMessageId: string) {
     await this.prisma.chatSessionMember.update({
       where: { sessionId_userId: { sessionId, userId } },
       data: { lastReadAt: new Date() },

@@ -74,7 +74,7 @@ export default function StreamingText({
         typingRef.current = null;
       }
     };
-  }, [content, isStreaming, typeChar]);
+  }, [content, isStreaming, typeChar, displayedContent.length]);
 
   if (!displayedContent) return null;
 

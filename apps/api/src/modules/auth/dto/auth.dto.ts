@@ -1,8 +1,8 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsOptional, Matches, ValidationOptions, registerDecorator } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsOptional, ValidationOptions, registerDecorator } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export function IsStrongPassword(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isStrongPassword',
       target: object.constructor,

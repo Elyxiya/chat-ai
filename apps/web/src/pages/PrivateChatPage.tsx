@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -20,16 +20,16 @@ export default function PrivateChatPage() {
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const session = sessions.find((s) => s.id === sessionId);
-  const sessionMessages = messages[sessionId || ''] || [];
+  const sessionMessages = useMemo(() => messages[sessionId || ''] || [], [messages, sessionId]);
 
   useEffect(() => {
     if (sessionId && sessionId !== activeSessionId) {
       setActiveSession(sessionId);
       loadMessages(sessionId);
     }
-  }, [sessionId]);
+  }, [sessionId, activeSessionId, setActiveSession, loadMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

@@ -23,8 +23,6 @@ export class RagEngine {
         return '';
       }
 
-      const kbFilter = kbId ? { kbId } : {};
-
       const chunks = await this.prisma.$queryRaw<
         Array<{ id: string; content: string; metadata: any; score: number }>
       >`
@@ -41,7 +39,7 @@ export class RagEngine {
       }
 
       const context = chunks
-        .map((c, i) => `[${i + 1}] ${c.content}\n来源: ${c.metadata?.source || '知识库'}`)
+        .map((c: any, i: number) => `[${i + 1}] ${c.content}\n来源: ${c.metadata?.source || '知识库'}`)
         .join('\n\n');
 
       return `【相关知识】\n${context}`;
@@ -76,7 +74,7 @@ export class RagEngine {
         LIMIT ${topK}
       `;
 
-      return chunks.map((c) => ({
+      return chunks.map((c: any) => ({
         id: c.id,
         content: c.content,
         score: c.score,
@@ -98,15 +96,18 @@ export class RagEngine {
       const provider = new DeepSeekProvider();
       const embedding = await provider.embed(content);
 
-      await this.prisma.knowledgeChunk.create({
-        data: {
-          kbId,
-          content,
-          embedding,
-          chunkIndex: 0,
-          metadata: metadata as any,
-        },
-      });
+      await this.prisma.$executeRaw`
+        INSERT INTO knowledge_chunks (id, kb_id, content, embedding, chunk_index, metadata, created_at)
+        VALUES (
+          gen_random_uuid(),
+          ${kbId}::uuid,
+          ${content}::text,
+          ${embedding}::vector(1536),
+          0::int,
+          ${JSON.stringify(metadata)}::jsonb,
+          NOW()
+        )
+      `;
     } catch (error) {
       this.logger.error(`Add chunk failed: ${error.message}`);
       throw error;

@@ -112,7 +112,7 @@ export class KnowledgeService {
     userId: string,
     kbId: string,
     content: string,
-    metadata: Record<string, any> = {},
+    _metadata: Record<string, unknown> = {},
   ) {
     const kb = await this.prisma.knowledgeBase.findUnique({ where: { id: kbId } });
     if (!kb) throw new NotFoundException('Knowledge base not found');

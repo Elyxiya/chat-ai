@@ -139,7 +139,7 @@ export class AuthService {
   async sendVerificationCode(email: string): Promise<void> {
     const code = crypto.randomBytes(3).toString('hex').toUpperCase();
     await this.redis.set(`verify:${email}`, code, this.CODE_TTL * 1000);
-    console.log(`[DEV] Verification code for ${email}: ${code}`);
+    console.warn(`[DEV] Verification code for ${email}: ${code}`);
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
@@ -178,7 +178,7 @@ export class AuthService {
     return `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user,user:email${stateParam}`;
   }
 
-  async handleGithubCallback(code: string, state?: string): Promise<AuthTokens> {
+  async handleGithubCallback(code: string, _state?: string): Promise<AuthTokens> {
     const tokenResponse = await fetch(
       'https://github.com/login/oauth/access_token',
       {
@@ -248,7 +248,7 @@ export class AuthService {
     return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid email profile${stateParam}`;
   }
 
-  async handleGoogleCallback(code: string, state?: string): Promise<AuthTokens> {
+  async handleGoogleCallback(code: string, _state?: string): Promise<AuthTokens> {
     const tokenResponse = await fetch(
       'https://oauth2.googleapis.com/token',
       {

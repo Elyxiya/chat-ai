@@ -37,7 +37,7 @@ export default function NotificationPanel() {
     } else {
       fetchUnreadCount();
     }
-  }, [isOpen]);
+  }, [isOpen, fetchNotifications, fetchUnreadCount]);
 
   if (!isOpen) return null;
 

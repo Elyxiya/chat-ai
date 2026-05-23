@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
+import { useAuthStore } from '@/stores/auth.store';
 
 export default function GroupManagementPage() {
   const { sessionId } = useParams();
@@ -17,10 +18,9 @@ export default function GroupManagementPage() {
     if (!isGroup || !sessionId) return;
     const loadMembers = async () => {
       try {
+        const token = useAuthStore.getState().accessToken;
         const res = await fetch(`/api/v1/chat/sessions/${sessionId}/members`, {
-          headers: {
-            Authorization: `Bearer ${JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken || ''}`,
-          },
+          headers: { Authorization: `Bearer ${token || ''}` },
         });
         const data = await res.json();
         setMembers(data.data || []);
@@ -33,11 +33,12 @@ export default function GroupManagementPage() {
     if (!inviteEmail.trim() || !sessionId) return;
     setLoading(true);
     try {
+      const token = useAuthStore.getState().accessToken;
       await fetch(`/api/v1/chat/sessions/${sessionId}/members`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken || ''}`,
+          Authorization: `Bearer ${token || ''}`,
         },
         body: JSON.stringify({ email: inviteEmail }),
       });
@@ -50,11 +51,10 @@ export default function GroupManagementPage() {
   const handleRemoveMember = async (userId: string) => {
     if (!sessionId) return;
     try {
+      const token = useAuthStore.getState().accessToken;
       await fetch(`/api/v1/chat/sessions/${sessionId}/members/${userId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken || ''}`,
-        },
+        headers: { Authorization: `Bearer ${token || ''}` },
       });
       setMembers((prev) => prev.filter((m) => m.user?.id !== userId));
     } catch { /* ignore */ }

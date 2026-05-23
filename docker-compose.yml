@@ -7,7 +7,7 @@
 services:
   # ── Database ───────────────────────────────────────────────
   postgres:
-    image: docker.icu.cn/pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16
     container_name: minichat-postgres
     restart: unless-stopped
     environment:
@@ -28,7 +28,7 @@ services:
 
   # ── Redis ──────────────────────────────────────────────────
   redis:
-    image: docker.icu.cn/library/redis:7-alpine
+    image: library/redis:7-alpine
     container_name: minichat-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -44,7 +44,7 @@ services:
 
   # ── MinIO (S3-compatible object storage) ──────────────────
   minio:
-    image: docker.icu.cn/minio/minio:latest
+    image: minio/minio:latest
     container_name: minichat-minio
     restart: unless-stopped
     environment:
@@ -65,8 +65,8 @@ services:
   # ── API Server ─────────────────────────────────────────────
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: production
     container_name: minichat-api
     restart: unless-stopped
@@ -94,6 +94,8 @@ services:
       RATE_LIMIT_MAX: 100
       AI_DAILY_LIMIT: 100
       AI_STREAM_TIMEOUT: 120000
+      AI_THINKING_ENABLED: ${AI_THINKING_ENABLED:-false}
+      AI_REASONING_EFFORT: ${AI_REASONING_EFFORT:-high}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
@@ -115,8 +117,8 @@ services:
   # ── Web Frontend ───────────────────────────────────────────
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
       target: production
     container_name: minichat-web
     restart: unless-stopped
@@ -146,7 +148,7 @@ services:
 
   # ── Redis Commander (dev only) ──────────────────────────────
   redis-commander:
-    image: docker.icu.cn/rediscommander/redis-commander:latest
+    image: rediscommander/redis-commander:latest
     container_name: minichat-redis-commander
     restart: unless-stopped
     environment:
@@ -160,7 +162,7 @@ services:
 
   # ── pgAdmin (dev only) ─────────────────────────────────────
   pgadmin:
-    image: docker.icu.cn/dpage/pgadmin4:latest
+    image: dpage/pgadmin4:latest
     container_name: minichat-pgadmin
     restart: unless-stopped
     environment:

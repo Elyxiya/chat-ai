@@ -2,8 +2,6 @@
 
 一个由 React、NestJS 和 DeepSeek LLM 驱动的 AI 原生即时通讯系统。
 
-## 系统架构
-
 ```mermaid
 flowchart TB
     subgraph Frontend["前端 (React 18 + TypeScript)"]
@@ -86,6 +84,7 @@ flowchart TB
 
 - Docker 和 Docker Compose
 - Node.js 20+（本地开发）
+- pnpm 9+（包管理器，可用 `npm install -g pnpm` 安装）
 
 ### 1. 克隆并配置
 
@@ -99,13 +98,16 @@ cp .env.example .env
 ### 2. 一键启动所有服务
 
 ```bash
+# 安装依赖（在根目录执行，勿在子目录单独安装）
+pnpm install
+
 # 使用 Docker Compose 启动完整环境
-npm run docker:up
+pnpm docker:up
 
 # 或本地开发模式
-npm run setup    # 安装依赖 + 生成 Prisma Client
-npm run docker:up # 启动数据库和中间件
-npm run dev      # 同时启动 API 和 Web
+pnpm setup    # 安装依赖 + 生成 Prisma Client
+pnpm docker:up # 启动数据库和中间件
+pnpm dev      # 同时启动 API 和 Web
 ```
 
 ### 3. 访问地址
@@ -118,34 +120,36 @@ npm run dev      # 同时启动 API 和 Web
 
 ### 根目录脚本（monorepo）
 
+> 本项目使用 **pnpm workspaces** 管理。所有包管理操作（安装、更新、删除依赖）均在根目录执行，**不要**在 `apps/*` 子目录下运行包管理命令。
+
 ```bash
-npm run dev           # 同时启动 API 和 Web（热重载）
-npm run build         # 构建所有应用
-npm run docker:up     # 启动 Docker 服务
-npm run docker:down   # 停止 Docker 服务
-npm run docker:logs   # 查看 Docker 日志
-npm run docker:clean  # 清理 Docker 卷（重置数据库）
-npm run db:push       # 推送 Prisma schema 到数据库
-npm run db:generate   # 生成 Prisma Client
-npm run db:studio     # 打开 Prisma Studio
-npm run check         # 类型检查 + Lint
+pnpm dev           # 同时启动 API 和 Web（热重载）
+pnpm build         # 构建所有应用
+pnpm docker:up     # 启动 Docker 服务
+pnpm docker:down   # 停止 Docker 服务
+pnpm docker:logs   # 查看 Docker 日志
+pnpm docker:clean  # 清理 Docker 卷（重置数据库）
+pnpm db:push       # 推送 Prisma schema 到数据库
+pnpm db:generate   # 生成 Prisma Client
+pnpm db:studio     # 打开 Prisma Studio
+pnpm check         # 类型检查 + Lint
 ```
 
 ### 后端
 
 ```bash
-npm run start:dev     # 热重载开发服务器
-npm run lint          # 代码检查
-npm run test          # 单元测试
-npx prisma studio     # 数据库可视化工具
+pnpm --filter api start:dev     # 热重载开发服务器
+pnpm --filter api lint          # 代码检查
+pnpm --filter api test          # 单元测试
+pnpm --filter api db:studio     # 数据库可视化工具
 ```
 
 ### 前端
 
 ```bash
-npm run dev           # 开发服务器（http://localhost:5173）
-npm run build         # 生产构建
-npm run preview       # 预览生产构建
+pnpm --filter web dev           # 开发服务器（http://localhost:5173）
+pnpm --filter web build         # 生产构建
+pnpm --filter web preview       # 预览生产构建
 ```
 
 ## API 接口
@@ -169,9 +173,21 @@ npm run preview       # 预览生产构建
 |------|------|------|
 | GET | /api/v1/chat/sessions | 获取会话列表 |
 | POST | /api/v1/chat/sessions | 创建会话 |
-| GET | /api/v1/chat/sessions/:id/messages | 获取消息 |
+| GET | /api/v1/chat/sessions/:id | 获取会话详情 |
+| PATCH | /api/v1/chat/sessions/:id | 更新会话 |
+| DELETE | /api/v1/chat/sessions/:id | 删除会话 |
+| GET | /api/v1/chat/sessions/:id/messages | 获取消息历史 |
 | POST | /api/v1/chat/sessions/:id/messages | 发送消息 |
-| POST | /api/v1/chat/sessions/:id/reactions | 添加表情反应 |
+| POST | /api/v1/chat/messages/recall | 撤回消息 |
+| POST | /api/v1/chat/messages/read | 标记已读 |
+| POST | /api/v1/chat/sessions/:id/members | 添加成员 |
+| DELETE | /api/v1/chat/sessions/:id/members/:userId | 移除成员 |
+| POST | /api/v1/chat/reactions | 添加表情反应 |
+| DELETE | /api/v1/chat/reactions | 移除表情反应 |
+| GET | /api/v1/chat/friends | 获取好友列表 |
+| POST | /api/v1/chat/friends/:friendId | 管理好友关系 |
+| GET | /api/v1/chat/users/search?q= | 搜索用户 |
+| GET | /api/v1/chat/online-users | 获取在线用户 |
 
 ### Agent
 

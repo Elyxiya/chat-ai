@@ -18,6 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
+      "@prisma/client": ["./node_modules/.prisma/client"],
+      "@prisma/client/*": ["./node_modules/.prisma/client/*"],
       "@app/shared": ["libs/shared/src"],
       "@app/shared/*": ["libs/shared/src/*"],
       "@app/config": ["libs/config/src"],

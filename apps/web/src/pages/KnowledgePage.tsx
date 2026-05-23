@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useKnowledgeStore } from '@/stores/knowledge.store';
-import { KnowledgeBase } from '@/types';
 
 export default function KnowledgePage() {
   const { bases, currentBase, searchQuery, searchResults, isSearching, fetchBases, createBase, deleteBase, addText, search, setCurrentBase, setSearchQuery } = useKnowledgeStore();
@@ -10,7 +9,7 @@ export default function KnowledgePage() {
   const [addTextContent, setAddTextContent] = useState('');
   const [activeTab, setActiveTab] = useState<'bases' | 'search'>('bases');
 
-  useEffect(() => { fetchBases(); }, []);
+  useEffect(() => { fetchBases(); }, [fetchBases]);
 
   const handleCreate = async () => {
     if (!newBaseName.trim()) return;

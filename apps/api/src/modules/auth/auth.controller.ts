@@ -3,22 +3,22 @@ import {
   Post,
   Body,
   UseGuards,
-  Req,
   HttpCode,
   HttpStatus,
   Get,
   UnauthorizedException,
+  Req,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto, RegisterDto, RefreshTokenDto, SendCodeDto, ResetPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { Request } from 'express';
 import { success } from '../common/result';
-import { UserPayload } from './dto/auth.dto';
 
 @ApiTags('Auth')
 @Controller({ path: 'auth', version: '1' })

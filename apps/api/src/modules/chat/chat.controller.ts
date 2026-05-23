@@ -6,7 +6,6 @@ import {
   Param,
   Query,
   UseGuards,
-  Req,
   Patch,
   Delete,
 } from '@nestjs/common';
@@ -20,11 +19,12 @@ import {
   QueryMessagesDto,
   UpdateSessionDto,
   AddMembersDto,
+  AddReactionDto,
+  RemoveReactionDto,
 } from './dto/chat.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { success } from '../common/result';
-import { Request } from 'express';
 
 @ApiTags('Chat')
 @ApiBearerAuth()
@@ -174,5 +174,27 @@ export class ChatController {
   @ApiOperation({ summary: 'Get online users' })
   async getOnlineUsers() {
     return success(await this.chatService.getOnlineUsers());
+  }
+
+  @Post('reactions')
+  @ApiOperation({ summary: 'Add reaction to a message' })
+  async addReaction(
+    @CurrentUser('id') userId: string,
+    @Body() dto: AddReactionDto,
+  ) {
+    return success(
+      await this.chatService.addReaction(userId, dto.messageId, dto.emoji),
+    );
+  }
+
+  @Delete('reactions')
+  @ApiOperation({ summary: 'Remove reaction from a message' })
+  async removeReaction(
+    @CurrentUser('id') userId: string,
+    @Body() dto: RemoveReactionDto,
+  ) {
+    return success(
+      await this.chatService.removeReaction(userId, dto.messageId, dto.emoji),
+    );
   }
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { KnowledgeBase } from '@/types';
+import { useAuthStore } from './auth.store';
 
 interface KnowledgeState {
   bases: KnowledgeBase[];
@@ -24,10 +25,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
   isSearching: false,
 
   fetchBases: async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
-      const token = localStorage.getItem('auth-storage')
-        ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken
-        : '';
       const res = await fetch('/api/v1/knowledge/bases', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -37,10 +37,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
   },
 
   createBase: async (data) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
-      const token = localStorage.getItem('auth-storage')
-        ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken
-        : '';
       await fetch('/api/v1/knowledge/bases', {
         method: 'POST',
         headers: {
@@ -54,10 +53,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
   },
 
   deleteBase: async (kbId) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
-      const token = localStorage.getItem('auth-storage')
-        ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken
-        : '';
       await fetch(`/api/v1/knowledge/bases/${kbId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -70,10 +68,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
   },
 
   addText: async (kbId, content) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     try {
-      const token = localStorage.getItem('auth-storage')
-        ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken
-        : '';
       await fetch(`/api/v1/knowledge/bases/${kbId}/text`, {
         method: 'POST',
         headers: {
@@ -86,11 +83,10 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
   },
 
   search: async (query, topK = 5) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
     set({ isSearching: true });
     try {
-      const token = localStorage.getItem('auth-storage')
-        ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken
-        : '';
       const res = await fetch(`/api/v1/knowledge/search?query=${encodeURIComponent(query)}&topK=${topK}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

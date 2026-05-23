@@ -75,16 +75,20 @@ export class MemoryService {
     userId: string,
     item: { type: string; content: any; importance?: number; sessionId?: string },
   ): Promise<void> {
-    await this.prisma.agentMemory.create({
-      data: {
-        userId,
-        sessionId: item.sessionId,
-        memoryType: item.type,
-        content: item.content as any,
-        importanceScore: item.importance || 0.5,
-        expiresAt: item.type === 'episodic' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
-      },
-    });
+    await this.prisma.$executeRaw`
+      INSERT INTO agent_memories (id, user_id, session_id, memory_type, content, embedding, importance_score, created_at, updated_at)
+      VALUES (
+        gen_random_uuid(),
+        ${userId}::uuid,
+        ${item.sessionId}::uuid,
+        ${item.type}::varchar(30),
+        ${JSON.stringify(item.content)}::jsonb,
+        '[0]'::vector(1536),
+        ${item.importance || 0.5}::float,
+        NOW(),
+        NOW()
+      )
+    `;
   }
 
   async getRelevantMemories(userId: string, query: string, topK = 5): Promise<MemoryItem[]> {
@@ -105,7 +109,7 @@ export class MemoryService {
       take: topK,
     });
 
-    return memories.map((m) => ({
+    return memories.map((m: any) => ({
       id: m.id,
       type: m.memoryType as any,
       content: m.content,

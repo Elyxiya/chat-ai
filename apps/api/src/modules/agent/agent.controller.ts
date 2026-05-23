@@ -9,7 +9,6 @@ import {
   Res,
   HttpCode,
   HttpStatus,
-  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiProduces } from '@nestjs/swagger';
 import { Response } from 'express';
