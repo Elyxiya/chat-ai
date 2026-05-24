@@ -187,14 +187,14 @@ describe('AuthService', () => {
       await expect(service.refreshTokens('expired-token')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('should throw UnauthorizedException when token is revoked', async () => {
+    it('AUTH-SVC-13: should throw UnauthorizedException when token is revoked', async () => {
       const revokedToken = makeRefreshToken({ revokedAt: new Date() });
       mockPrisma.refreshToken.findUnique.mockResolvedValue(revokedToken);
 
       await expect(service.refreshTokens('revoked-token')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('should throw UnauthorizedException when token not found', async () => {
+    it('AUTH-SVC-14: should throw UnauthorizedException when token not found', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
 
       await expect(service.refreshTokens('nonexistent-token')).rejects.toThrow(UnauthorizedException);
@@ -341,6 +341,246 @@ describe('AuthService', () => {
       await expect(service.deleteAccount('user-1', 'WrongPassword')).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('handleGithubCallback', () => {
+    const mockGithubTokenResponse = { access_token: 'github-access-token' };
+    const mockGithubUser = {
+      id: 12345,
+      email: 'github@example.com',
+      name: 'GitHub User',
+      login: 'githubuser',
+      avatar_url: 'https://avatars.githubusercontent.com/u/12345',
+    };
+
+    beforeEach(() => {
+      global.fetch = jest.fn() as jest.Mock;
+    });
+
+    afterEach(() => {
+      delete (global as any).fetch;
+    });
+
+    it('AUTH-OAUTH-01: should create new user and return tokens on first GitHub login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGithubTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGithubUser) });
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(null);
+      const newOAuthAccount = {
+        provider: 'github',
+        providerUserId: '12345',
+        user: makeUser({ id: 'new-user-id', email: 'github@example.com' }),
+      };
+      mockPrisma.oAuthAccount.create.mockResolvedValue(newOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleGithubCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(mockPrisma.oAuthAccount.create).toHaveBeenCalled();
+    });
+
+    it('AUTH-OAUTH-02: should return existing user on repeat GitHub login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGithubTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGithubUser) });
+      const existingOAuthAccount = {
+        provider: 'github',
+        providerUserId: '12345',
+        user: makeUser({ id: 'existing-user-id', email: 'github@example.com' }),
+      };
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(existingOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleGithubCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(mockPrisma.oAuthAccount.create).not.toHaveBeenCalled();
+      expect(mockPrisma.oAuthAccount.findUnique).toHaveBeenCalled();
+    });
+
+    it('AUTH-OAUTH-03: should throw BadRequestException when GitHub has no public email', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGithubTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ ...mockGithubUser, email: null }) });
+
+      await expect(service.handleGithubCallback('auth-code')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('handleGoogleCallback', () => {
+    const mockGoogleTokenResponse = {
+      access_token: 'google-access-token',
+      refresh_token: 'google-refresh-token',
+      expires_in: 3600,
+    };
+    const mockGoogleUser = {
+      id: 'google-user-id',
+      email: 'google@example.com',
+      name: 'Google User',
+      picture: 'https://lh3.googleusercontent.com/picture',
+      given_name: 'Google',
+    };
+
+    beforeEach(() => {
+      global.fetch = jest.fn() as jest.Mock;
+    });
+
+    afterEach(() => {
+      delete (global as any).fetch;
+    });
+
+    it('AUTH-OAUTH-04: should create new user and return tokens on first Google login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGoogleTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGoogleUser) });
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(null);
+      const newOAuthAccount = {
+        provider: 'google',
+        providerUserId: 'google-user-id',
+        user: makeUser({ id: 'new-user-id', email: 'google@example.com' }),
+      };
+      mockPrisma.oAuthAccount.create.mockResolvedValue(newOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleGoogleCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(mockPrisma.oAuthAccount.create).toHaveBeenCalled();
+    });
+
+    it('AUTH-OAUTH-05: should return existing user on repeat Google login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGoogleTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockGoogleUser) });
+      const existingOAuthAccount = {
+        provider: 'google',
+        providerUserId: 'google-user-id',
+        user: makeUser({ id: 'existing-user-id', email: 'google@example.com' }),
+      };
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(existingOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleGoogleCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(mockPrisma.oAuthAccount.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('JWT Token Payload', () => {
+    it('AUTH-SVC-15: should include correct userId and username in JWT payload', async () => {
+      const userPayload = { id: 'user-1', username: 'testuser', email: 'test@example.com', nickname: 'Test', avatarUrl: null, userType: 'human' as const };
+      mockPrisma.user.update.mockResolvedValue(makeUser({ id: 'user-1', status: 'online' }));
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      await service.login(userPayload);
+
+      expect(mockJwtService.sign).toHaveBeenCalledWith({
+        sub: 'user-1',
+        username: 'testuser',
+      });
+    });
+
+    it('AUTH-SVC-16: should return user payload with all fields in tokens', async () => {
+      const userPayload = { id: 'user-1', username: 'testuser', email: 'test@example.com', nickname: 'Test', avatarUrl: 'http://avatar.url', userType: 'human' as const };
+      mockPrisma.user.update.mockResolvedValue(makeUser({ id: 'user-1' }));
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.login(userPayload);
+
+      expect(result.user).toEqual(expect.objectContaining({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@example.com',
+        nickname: 'Test',
+        avatarUrl: 'http://avatar.url',
+        userType: 'human',
+      }));
+    });
+  });
+
+  describe('Password Validation', () => {
+    it('AUTH-SVC-17: should reject weak passwords and accept strong ones', () => {
+      const validate = (password: string) => {
+        return typeof password === 'string' &&
+          password.length >= 8 &&
+          /[A-Z]/.test(password) &&
+          /[a-z]/.test(password) &&
+          /[0-9]/.test(password);
+      };
+
+      expect(validate('Short1A')).toBe(false);       // too short
+      expect(validate('nouppercase1')).toBe(false);  // no uppercase
+      expect(validate('NOLOWERCASE1')).toBe(false);  // no lowercase
+      expect(validate('NoNumbers!')).toBe(false);    // no number
+      expect(validate('ValidPass1')).toBe(true);     // valid
+    });
+
+    it('AUTH-SVC-18: should reject password shorter than 8 characters', () => {
+      const validate = (password: string) => {
+        return typeof password === 'string' &&
+          password.length >= 8 &&
+          /[A-Z]/.test(password) &&
+          /[a-z]/.test(password) &&
+          /[0-9]/.test(password);
+      };
+
+      expect(validate('Ab1')).toBe(false);
+      expect(validate('Abcdef1')).toBe(false);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('EDGE-AUTH-01: should handle concurrent registration attempts gracefully', async () => {
+      const dto = { username: 'newuser', email: 'new@example.com', password: 'Password123' };
+      const mockUser = makeUser({ id: 'new-user-id', username: dto.username, email: dto.email });
+      mockPrisma.user.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(mockUser);
+      mockPrisma.user.create.mockResolvedValue(mockUser);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.register(dto);
+
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('EDGE-AUTH-02: should handle login with email identifier', async () => {
+      const mockUser = makeUser({ id: 'user-1', username: 'testuser', email: 'test@example.com' });
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const result = await service.validateUser('test@example.com', 'Password123');
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('user-1');
+    });
+
+    it('EDGE-AUTH-03: should handle case-insensitive email in registration', async () => {
+      const dto = { username: 'newuser', email: 'New@Example.COM', password: 'Password123' };
+      const mockUser = makeUser({ id: 'new-user-id', email: dto.email });
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue(mockUser);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.register(dto);
+
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('EDGE-AUTH-04: should generate unique refresh tokens', async () => {
+      const dto = { username: 'user1', email: 'user1@example.com', password: 'Password123' };
+      const mockUser = makeUser({ id: 'user-1', username: dto.username, email: dto.email });
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue(mockUser);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result1 = await service.register(dto);
+      const result2 = await service.register({ ...dto, username: 'user2', email: 'user2@example.com' });
+
+      expect(result1.refreshToken).not.toBe(result2.refreshToken);
     });
   });
 });

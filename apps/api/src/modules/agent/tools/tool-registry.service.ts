@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
+import { EmbeddingService } from '../../llm/providers/embedding.service';
 import { ToolDefinition, AgentContext } from '../types';
 
 @Injectable()
@@ -7,7 +8,10 @@ export class ToolRegistry {
   private readonly logger = new Logger(ToolRegistry.name);
   private readonly tools: Map<string, ToolDefinition> = new Map();
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly embedding: EmbeddingService,
+  ) {
     this.registerBuiltInTools();
   }
 
@@ -21,7 +25,7 @@ export class ToolRegistry {
       },
       handler: async ({ query, topK = 5 }, ctx) => {
         const { RagEngine } = await import('../rag/rag-engine.service');
-        const rag = new RagEngine(this.prisma);
+        const rag = new RagEngine(this.prisma, this.embedding);
         const results = await rag.retrieve(query, ctx.userId, topK);
         return results;
       },

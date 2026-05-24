@@ -47,7 +47,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     socket.on('connect', () => {
-      console.log('WebSocket connected');
     });
 
     socket.on('message', (msg: ChatMessage) => {
@@ -114,7 +113,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     socket.on('disconnect', () => {
-      console.log('WebSocket disconnected');
     });
 
     set({ socket });

@@ -6,9 +6,6 @@ on:
     paths-ignore:
       - '**.md'
       - '**.txt'
-      - '**.json'
-      - '**.yml'
-      - '**.yaml'
       - 'docs/**'
       - 'db/**'
       - 'docker/**'
@@ -20,9 +17,6 @@ on:
     paths-ignore:
       - '**.md'
       - '**.txt'
-      - '**.json'
-      - '**.yml'
-      - '**.yaml'
       - 'docs/**'
       - 'db/**'
       - 'docker/**'
@@ -64,32 +58,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: apps/api/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
+        run: pnpm install
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: pnpm --filter ai-native-chat-api prisma:generate
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
 
+      - name: Lint
+        run: pnpm --filter ai-native-chat-api lint
+
       - name: Run tests
-        run: npm test -- --passWithNoTests
+        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
           REDIS_HOST: localhost
           JWT_SECRET: test_jwt_secret
           JWT_REFRESH_SECRET: test_jwt_refresh
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          EMBEDDING_PROVIDER: openai
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   lint-and-test-web:
     runs-on: ubuntu-latest
@@ -100,21 +101,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: apps/web/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install
 
       - name: Lint
-        run: npm run lint
+        run: pnpm --filter ai-native-chat-web lint
 
       - name: Build
-        run: npm run build
+        run: pnpm --filter ai-native-chat-web build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:3000' }}
 
   docker-build-push:
     runs-on: ubuntu-latest
@@ -154,9 +162,9 @@ jobs:
           labels: ${{ steps.meta-api.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          env:
-            DATABASE_URL: postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
-            JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          build-args: |
+            DATABASE_URL=postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
 
       - name: Extract metadata (Web)
         id: meta-web

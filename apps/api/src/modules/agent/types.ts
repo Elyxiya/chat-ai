@@ -26,7 +26,7 @@ export interface AgentResponse {
 export interface IntentClassification {
   type: 'simple' | 'complex' | 'reasoning' | 'creative';
   confidence: number;
-  reason: string;
+  reason?: string;
 }
 
 export interface ToolCall {

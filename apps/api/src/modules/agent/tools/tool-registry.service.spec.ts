@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ToolRegistry } from './tool-registry.service';
 import { PrismaService } from '../../../config/prisma.service';
+import { EmbeddingService } from '../../llm/providers/embedding.service';
 
 describe('ToolRegistry', () => {
   let registry: ToolRegistry;
@@ -21,6 +22,7 @@ describe('ToolRegistry', () => {
       providers: [
         ToolRegistry,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmbeddingService, useValue: { embed: jest.fn() } },
       ],
     }).compile();
 

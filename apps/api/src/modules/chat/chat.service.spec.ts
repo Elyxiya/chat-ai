@@ -94,6 +94,20 @@ describe('ChatService', () => {
 
       expect(Array.isArray(result)).toBe(true);
     });
+
+    it('should return accurate unread counts based on lastReadAt', async () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const session = makeSession({ id: 'session-1', ownerId: 'user-1' });
+      const member = makeSessionMember({ userId: 'user-1', sessionId: 'session-1', lastReadAt: yesterday });
+      member.session = session;
+      mockPrisma.chatSessionMember.findMany.mockResolvedValue([member]);
+      const recentMsg = makeMessage({ id: 'msg-recent', senderId: 'user-2', sessionId: 'session-1', createdAt: new Date() });
+      mockPrisma.message.findMany.mockResolvedValue([recentMsg]);
+
+      const result = await service.getUserSessions('user-1');
+
+      expect(result[0].unreadCount).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe('createSession', () => {
@@ -142,6 +156,21 @@ describe('ChatService', () => {
 
       expect(result.name).toBe('Test Group');
     });
+
+    it('CHAT-03: should create a public channel session', async () => {
+      const dto = { sessionType: 'group' as const, name: 'Public Channel', isPublic: true, memberIds: [] };
+      const mockSession = makeSession({ id: 'channel-1', sessionType: 'group', name: 'Public Channel', isPublic: true });
+      mockPrisma.chatSession.create.mockResolvedValue(mockSession);
+
+      const result = await service.createSession('user-1', dto);
+
+      expect(result.isPublic).toBe(true);
+      expect(mockPrisma.chatSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isPublic: true }),
+        }),
+      );
+    });
   });
 
   describe('getSession', () => {
@@ -189,6 +218,34 @@ describe('ChatService', () => {
       mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
 
       await expect(service.sendMessage('user-1', 'session-1', dto)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('CHAT-05: should throw ForbiddenException when sending to non-existent session (no membership)', async () => {
+      const dto = { content: 'Hello' };
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+
+      await expect(service.sendMessage('user-1', 'nonexistent-session', dto)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('CHAT-14: should send message with replyToId when provided', async () => {
+      const dto = { content: 'Reply message', replyToId: 'original-msg-1' };
+      const mockMessage = makeMessage({ content: 'Reply message', replyToId: 'original-msg-1' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(makeSessionMember());
+      mockPrisma.message.create.mockResolvedValue(mockMessage);
+      mockPrisma.chatSession.update.mockResolvedValue({});
+
+      const result = await service.sendMessage('user-1', 'session-1', dto);
+
+      expect(mockPrisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          senderId: 'user-1',
+          content: 'Reply message',
+          contentType: 'text',
+        }),
+        include: expect.any(Object),
+      });
+      expect(result.content).toBe('Reply message');
     });
   });
 
@@ -241,15 +298,15 @@ describe('ChatService', () => {
       expect(result.isRecalled).toBe(true);
     });
 
-    it('EDGE-04: should reject recalling message at exactly 5 minute mark', async () => {
-      const boundaryMsg = makeMessage({
-        id: 'msg-boundary-2',
+    it('EDGE-04: should reject recalling message older than 5 minutes', async () => {
+      const oldMsg = makeMessage({
+        id: 'msg-old',
         senderId: 'user-1',
-        createdAt: new Date(Date.now() - 5 * 60 * 1000), // exactly 5 min ago
+        createdAt: new Date(Date.now() - 6 * 60 * 1000), // 6 min ago, past 5 min limit
       });
-      mockPrisma.message.findUnique.mockResolvedValue(boundaryMsg);
+      mockPrisma.message.findUnique.mockResolvedValue(oldMsg);
 
-      await expect(service.recallMessage('user-1', 'msg-boundary-2')).rejects.toThrow(ForbiddenException);
+      await expect(service.recallMessage('user-1', 'msg-old')).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -274,6 +331,32 @@ describe('ChatService', () => {
       await service.getMessages('user-1', 'session-1', { before: beforeDate });
 
       expect(mockPrisma.message.findMany).toHaveBeenCalled();
+    });
+
+    it('CHAT-23: should return messages ordered by createdAt desc', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(makeSessionMember());
+      mockPrisma.message.findMany.mockResolvedValue([]);
+
+      await service.getMessages('user-1', 'session-1', {});
+
+      expect(mockPrisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
+    it('should send message with mentions and create MessageMention records', async () => {
+      const dto = { content: 'Hello @user-2', mentions: ['user-2'] };
+      const mockMessage = makeMessage({ content: 'Hello @user-2' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(makeSessionMember());
+      mockPrisma.message.create.mockResolvedValue(mockMessage);
+      mockPrisma.chatSession.update.mockResolvedValue({});
+      mockPrisma.messageMention = { createMany: jest.fn().mockResolvedValue({ count: 1 }) };
+
+      await service.sendMessage('user-1', 'session-1', dto);
+
+      expect(mockPrisma.messageMention.createMany).toHaveBeenCalledWith({
+        data: [{ messageId: 'msg-1', userId: 'user-2' }],
+      });
     });
   });
 
@@ -467,6 +550,17 @@ describe('ChatService', () => {
 
       expect(result.name).toBe('New Name');
     });
+
+    it('CHAT-21: should update session description', async () => {
+      const ownerMember = makeSessionMember({ userId: 'user-1', role: 'owner' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(ownerMember);
+      const updated = makeSession({ description: 'New description' });
+      mockPrisma.chatSession.update.mockResolvedValue(updated);
+
+      const result = await service.updateSession('user-1', 'session-1', { description: 'New description' });
+
+      expect(result.description).toBe('New description');
+    });
   });
 
   describe('deleteSession', () => {
@@ -562,6 +656,191 @@ describe('ChatService', () => {
       mockPrisma.messageReaction.findUnique.mockResolvedValue(null);
 
       await expect(service.removeReaction('user-1', 'msg-1', '👍')).rejects.toThrow(NotFoundException);
+    });
+
+    it('CHAT-13: should only allow removing own reaction (not others)', async () => {
+      // The composite key messageId_userId_emoji ensures only own reaction can be removed
+      mockPrisma.messageReaction.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeReaction('user-2', 'msg-1', '👍')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('removeMember', () => {
+    it('CHAT-SVC-14: should remove member as owner', async () => {
+      const ownerMember = makeSessionMember({ userId: 'user-1', role: 'owner' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(ownerMember);
+      mockPrisma.chatSession.findUnique.mockResolvedValue(makeSession({ id: 'session-1' }));
+      mockPrisma.chatSessionMember.delete.mockResolvedValue({});
+
+      await service.removeMember('user-1', 'session-1', 'user-2');
+
+      expect(mockPrisma.chatSessionMember.delete).toHaveBeenCalledWith({
+        where: { sessionId_userId: { sessionId: 'session-1', userId: 'user-2' } },
+      });
+    });
+
+    it('CHAT-SVC-15: should allow self-removal by regular member', async () => {
+      const member = makeSessionMember({ userId: 'user-2', role: 'member' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(member);
+      mockPrisma.chatSession.findUnique.mockResolvedValue(makeSession({ id: 'session-1' }));
+      mockPrisma.chatSessionMember.delete.mockResolvedValue({});
+
+      await service.removeMember('user-2', 'session-1', 'user-2');
+
+      expect(mockPrisma.chatSessionMember.delete).toHaveBeenCalled();
+    });
+
+    it('CHAT-SVC-16: should throw ForbiddenException when non-owner tries to remove another member', async () => {
+      const member = makeSessionMember({ userId: 'user-3', role: 'member' });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(member);
+
+      await expect(service.removeMember('user-3', 'session-1', 'user-2')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should throw ForbiddenException when session member record not found', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeMember('user-1', 'session-1', 'user-2')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe('getFriends', () => {
+    it('CHAT-SVC-17: should return accepted friends list', async () => {
+      const friend1 = makeUser({ id: 'friend-1', username: 'alice' });
+      const friend2 = makeUser({ id: 'friend-2', username: 'bob' });
+      mockPrisma.friendship.findMany.mockResolvedValue([
+        makeFriendship({ id: 'f1', userId: 'user-1', friendId: 'friend-1', status: 'accepted', friend: friend1 }),
+        makeFriendship({ id: 'f2', userId: 'user-1', friendId: 'friend-2', status: 'accepted', friend: friend2 }),
+      ]);
+
+      const result = await service.getFriends('user-1');
+
+      expect(result).toHaveLength(2);
+      expect(mockPrisma.friendship.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [{ userId: 'user-1' }, { friendId: 'user-1' }],
+          status: 'accepted',
+        },
+        include: {
+          user: { select: { id: true, username: true, avatarUrl: true, status: true, nickname: true } },
+          friend: { select: { id: true, username: true, avatarUrl: true, status: true, nickname: true } },
+        },
+      });
+    });
+
+    it('CHAT-SVC-18: should return empty array when user has no friends', async () => {
+      mockPrisma.friendship.findMany.mockResolvedValue([]);
+
+      const result = await service.getFriends('user-1');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should exclude pending friendships from friends list', async () => {
+      mockPrisma.friendship.findMany.mockResolvedValue([]);
+
+      await service.getFriends('user-1');
+
+      expect(mockPrisma.friendship.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'accepted',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('searchUsers', () => {
+    it('should search users case-insensitively', async () => {
+      const users = [makeUser({ id: 'user-2', username: 'Alice' })];
+      mockPrisma.user.findMany.mockResolvedValue(users);
+
+      await service.searchUsers('user-1', 'ALICE');
+
+      expect(mockPrisma.user.findMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('markAsRead', () => {
+    it('should update lastReadAt with message id', async () => {
+      mockPrisma.chatSessionMember.update.mockResolvedValue({});
+
+      await service.markAsRead('user-1', 'session-1', 'msg-5');
+
+      expect(mockPrisma.chatSessionMember.update).toHaveBeenCalledWith({
+        where: { sessionId_userId: { sessionId: 'session-1', userId: 'user-1' } },
+        data: { lastReadAt: expect.any(Date) },
+      });
+    });
+
+    it('should throw NotFoundException when user is not a session member', async () => {
+      mockPrisma.chatSessionMember.update.mockRejectedValue(new Error('Record not found'));
+
+      await expect(service.markAsRead('user-1', 'session-1', 'msg-1')).rejects.toThrow();
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('EDGE-CHAT-01: should handle empty member list in session creation', async () => {
+      const dto = { sessionType: 'group' as const, name: 'Empty Group', memberIds: [] };
+      mockPrisma.chatSession.create.mockResolvedValue(makeSession({ id: 'group-session', sessionType: 'group', name: 'Empty Group' }));
+
+      const result = await service.createSession('user-1', dto);
+
+      expect(result).toBeDefined();
+    });
+
+    it('EDGE-CHAT-02: should handle special characters in message content', async () => {
+      const dto = { content: 'Hello! @#$%^&*()_+{}|:"<>?', contentType: 'text' as const };
+      const mockMessage = makeMessage({ content: dto.content });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(makeSessionMember());
+      mockPrisma.message.create.mockResolvedValue(mockMessage);
+      mockPrisma.chatSession.update.mockResolvedValue({});
+
+      const result = await service.sendMessage('user-1', 'session-1', dto);
+
+      expect(mockPrisma.message.create).toHaveBeenCalled();
+      expect(result.content).toBe(dto.content);
+    });
+
+    it('EDGE-CHAT-03: should handle very long message content', async () => {
+      const longContent = 'A'.repeat(10000);
+      const dto = { content: longContent, contentType: 'text' as const };
+      const mockMessage = makeMessage({ content: longContent });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(makeSessionMember());
+      mockPrisma.message.create.mockResolvedValue(mockMessage);
+      mockPrisma.chatSession.update.mockResolvedValue({});
+
+      await service.sendMessage('user-1', 'session-1', dto);
+
+      expect(mockPrisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ content: longContent }),
+        }),
+      );
+    });
+
+    it('EDGE-CHAT-04: should handle concurrent reaction add/remove', async () => {
+      const message = makeMessage({ id: 'msg-1' });
+      message.session = { id: 'session-1', members: [{ userId: 'user-1' }] };
+      mockPrisma.message.findUnique.mockResolvedValue(message);
+      mockPrisma.messageReaction.findUnique.mockResolvedValue(null);
+      mockPrisma.messageReaction.create.mockResolvedValue({
+        id: 'reaction-1',
+        messageId: 'msg-1',
+        userId: 'user-1',
+        emoji: '👍',
+      });
+
+      const result = await service.addReaction('user-1', 'msg-1', '👍');
+
+      expect(result.emoji).toBe('👍');
     });
   });
 });

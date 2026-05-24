@@ -26,11 +26,9 @@ export default function UserSearchModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleAction = async (targetUserId: string, action: string) => {
+  const handleAction = async (targetUserId: string, action: 'request' | 'accept' | 'reject' | 'block') => {
     try {
-      if ((chatApi as any).manageFriend) {
-        await (chatApi as any).manageFriend(targetUserId, { action });
-      }
+      await chatApi.manageFriend(targetUserId, { action });
       setFriendStatus((prev) => ({ ...prev, [targetUserId]: action === 'request' ? 'pending' : 'accepted' }));
     } catch { /* ignore */ }
   };

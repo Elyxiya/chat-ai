@@ -25,6 +25,7 @@ export default function StreamingText({
   const contentRef = useRef(content);
   const typingRef = useRef<number | null>(null);
   const speedRef = useRef(typingSpeed);
+  const displayedLenRef = useRef(0);
 
   useEffect(() => {
     speedRef.current = typingSpeed;
@@ -32,22 +33,25 @@ export default function StreamingText({
 
   useEffect(() => {
     contentRef.current = content;
-    setDisplayedContent(content);
-  }, [content]);
+    if (!isStreaming) {
+      // When streaming ends, show full content immediately (no typewriter needed)
+      displayedLenRef.current = content.length;
+      setDisplayedContent(content);
+    }
+  }, [content, isStreaming]);
 
   const typeChar = useCallback(() => {
     const target = contentRef.current;
-    setDisplayedContent((prev) => {
-      if (prev.length < target.length) {
-        const next = target.slice(0, prev.length + 1);
-        const delay = speedRef.current;
-        typingRef.current = window.setTimeout(typeChar, delay) as unknown as number;
-        return next;
-      } else {
-        setIsTyping(false);
-        return prev;
-      }
-    });
+    const prevLen = displayedLenRef.current;
+    if (prevLen < target.length) {
+      const next = target.slice(0, prevLen + 1);
+      displayedLenRef.current = next.length;
+      setDisplayedContent(next);
+      const delay = speedRef.current;
+      typingRef.current = window.setTimeout(typeChar, delay) as unknown as number;
+    } else {
+      setIsTyping(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -59,11 +63,13 @@ export default function StreamingText({
       typingRef.current = null;
     }
 
-    if (isStreaming && target.length > displayedContent.length) {
+    if (isStreaming && target.length > displayedLenRef.current) {
       setIsTyping(true);
       const delay = speedRef.current;
       typingRef.current = window.setTimeout(typeChar, delay) as unknown as number;
     } else if (!isStreaming) {
+      // Streaming ended — show full content immediately
+      displayedLenRef.current = target.length;
       setDisplayedContent(target);
       setIsTyping(false);
     }
@@ -74,7 +80,9 @@ export default function StreamingText({
         typingRef.current = null;
       }
     };
-  }, [content, isStreaming, typeChar, displayedContent.length]);
+    // NOTE: do NOT add displayedContent.length to deps — it causes an infinite render loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, isStreaming, typeChar]);
 
   if (!displayedContent) return null;
 

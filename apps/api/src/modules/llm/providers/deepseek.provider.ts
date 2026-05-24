@@ -21,12 +21,16 @@ export class DeepSeekProvider implements LLMProvider {
   private readonly baseUrl: string;
   private readonly modelV3: string;
   private readonly modelR1: string;
+  private readonly embeddingUrl: string;
+  private readonly embeddingModel: string;
 
   constructor(private readonly config?: ConfigService) {
     this.apiKey = process.env.DEEPSEEK_API_KEY || '';
     this.baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
     this.modelV3 = process.env.DEEPSEEK_MODEL_V3 || 'deepseek-chat';
     this.modelR1 = process.env.DEEPSEEK_MODEL_R1 || 'deepseek-reasoner';
+    this.embeddingUrl = process.env.DEEPSEEK_EMBEDDING_URL || `${this.baseUrl}/v1/embeddings`;
+    this.embeddingModel = process.env.DEEPSEEK_EMBEDDING_MODEL || 'deepseek-embedding';
   }
 
   private getModel(options?: LLMOptions): string {
@@ -34,13 +38,10 @@ export class DeepSeekProvider implements LLMProvider {
     return this.modelV3;
   }
 
-  /** Build the extra_body for thinking mode */
+  /** Build the extra_body for thinking mode (only thinking switch goes in extra_body) */
   private buildExtraBody(options?: LLMOptions): Record<string, any> {
     if (!options?.thinking) return {};
-    return {
-      thinking: { type: 'enabled' },
-      reasoning_effort: normalizeEffort(options.reasoningEffort),
-    };
+    return { thinking: { type: 'enabled' } };
   }
 
   async chat(prompt: ChatPromptInput, options?: LLMOptions): Promise<string> {
@@ -60,6 +61,7 @@ export class DeepSeekProvider implements LLMProvider {
       // Thinking mode: no temperature/top_p
       if (options?.thinking) {
         body.extra_body = this.buildExtraBody(options);
+        body.reasoning_effort = normalizeEffort(options.reasoningEffort);
       } else {
         body.temperature = options?.temperature ?? 0.7;
         body.top_p = options?.topP;
@@ -113,6 +115,7 @@ export class DeepSeekProvider implements LLMProvider {
 
     if (options?.thinking) {
       body.extra_body = this.buildExtraBody(options);
+      body.reasoning_effort = normalizeEffort(options.reasoningEffort);
     } else {
       body.temperature = options?.temperature ?? 0.7;
       body.top_p = options?.topP;
@@ -216,9 +219,9 @@ export class DeepSeekProvider implements LLMProvider {
 
     try {
       const response = await axios.post(
-        `${this.baseUrl}/embeddings`,
+        this.embeddingUrl,
         {
-          model: 'embedding-3',
+          model: this.embeddingModel,
           input: text,
         },
         {

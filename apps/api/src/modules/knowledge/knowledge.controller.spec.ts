@@ -144,4 +144,40 @@ describe('KnowledgeController', () => {
       expect((result as any).message).toBe('Document deleted');
     });
   });
+
+  describe('Edge Cases', () => {
+    it('EDGE-KNOW-CTRL-01: should handle search with default topK', async () => {
+      const results: any[] = [];
+      mockKnowledgeService.search.mockResolvedValue(results);
+
+      await controller.search('user-1', { query: 'test' });
+
+      expect(mockKnowledgeService.search).toHaveBeenCalled();
+    });
+
+    it('EDGE-KNOW-CTRL-02: should handle search with empty query', async () => {
+      const results: any[] = [];
+      mockKnowledgeService.search.mockResolvedValue(results);
+
+      await controller.search('user-1', { query: '' });
+
+      expect(mockKnowledgeService.search).toHaveBeenCalled();
+    });
+
+    it('EDGE-KNOW-CTRL-03: should handle listBases with empty result', async () => {
+      mockKnowledgeService.listBases.mockResolvedValue([]);
+
+      const result = await controller.listBases('user-1');
+
+      expect((result as any).data).toEqual([]);
+    });
+
+    it('EDGE-KNOW-CTRL-04: should handle listDocuments with empty result', async () => {
+      mockKnowledgeService.listDocuments.mockResolvedValue([]);
+
+      const result = await controller.listDocuments('kb-1');
+
+      expect((result as any).data).toEqual([]);
+    });
+  });
 });

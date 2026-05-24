@@ -86,6 +86,32 @@ describe('NotificationService', () => {
         }),
       });
     });
+
+    it('NOTIF-02: should create notification with requester data and emit via gateway', async () => {
+      const notification = makeNotification({
+        type: NotificationType.FRIEND_REQUEST,
+        data: { requesterId: 'user-1' },
+      });
+      mockPrisma.notification.create.mockResolvedValue(notification);
+
+      await service.createFriendRequest('user-1', 'user-2', 'Alice');
+
+      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-2',
+          type: NotificationType.FRIEND_REQUEST,
+          title: '好友请求',
+          data: { requesterId: 'user-1' },
+        }),
+      });
+      expect(mockChatGateway.emitToUser).toHaveBeenCalledWith(
+        'user-2',
+        'notification',
+        expect.objectContaining({
+          type: NotificationType.FRIEND_REQUEST,
+        }),
+      );
+    });
   });
 
   describe('createMention', () => {
@@ -197,13 +223,77 @@ describe('NotificationService', () => {
   });
 
   describe('deleteAll', () => {
-    it('NOTIF-SVC-05: should delete all notifications for user', async () => {
+    it('NOTIF-SVC-06: should delete all notifications for user', async () => {
       mockPrisma.notification.deleteMany.mockResolvedValue({ count: 20 });
 
       const result = await service.deleteAll('user-1');
 
       expect(result.count).toBe(20);
       expect(mockPrisma.notification.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+    });
+  });
+
+  describe('Notification Payload', () => {
+    it('NOTIF-09: should include correct type, metadata, and timestamp in emitted payload', async () => {
+      const now = new Date();
+      const notification = makeNotification({
+        id: 'notif-payload',
+        userId: 'user-2',
+        type: NotificationType.FRIEND_REQUEST,
+        title: '好友请求',
+        content: 'Alice 向你发送了好友请求',
+        data: { requesterId: 'user-1' },
+        createdAt: now,
+      });
+      mockPrisma.notification.create.mockResolvedValue(notification);
+
+      await service.createFriendRequest('user-1', 'user-2', 'Alice');
+
+      expect(mockChatGateway.emitToUser).toHaveBeenCalledWith(
+        'user-2',
+        'notification',
+        expect.objectContaining({
+          id: 'notif-payload',
+          type: NotificationType.FRIEND_REQUEST,
+          title: '好友请求',
+          content: expect.stringContaining('Alice'),
+          data: expect.objectContaining({ requesterId: 'user-1' }),
+          createdAt: now,
+        }),
+      );
+    });
+
+    it('NOTIF-09: should include sessionId for mention notification payload', async () => {
+      const notification = makeNotification({
+        type: NotificationType.MENTION,
+        data: { sessionId: 'session-1' },
+      });
+      mockPrisma.notification.create.mockResolvedValue(notification);
+
+      await service.createMention('session-1', 'user-2', 'Bob', 'Hello @user-2!');
+
+      expect(mockChatGateway.emitToUser).toHaveBeenCalledWith(
+        'user-2',
+        'notification',
+        expect.objectContaining({
+          type: NotificationType.MENTION,
+          data: expect.objectContaining({ sessionId: 'session-1' }),
+        }),
+      );
+    });
+
+    it('should truncate long content in mention notification to 50 chars', async () => {
+      const longContent = 'A'.repeat(100);
+      const notification = makeNotification({ type: NotificationType.MENTION });
+      mockPrisma.notification.create.mockResolvedValue(notification);
+
+      await service.createMention('session-1', 'user-2', 'Bob', longContent);
+
+      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          content: expect.stringMatching(/\.\.\.$/),
+        }),
+      });
     });
   });
 });

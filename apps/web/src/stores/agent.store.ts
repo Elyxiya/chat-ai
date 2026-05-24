@@ -166,12 +166,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   set({ currentStep: event.data?.step || 0 });
                   break;
 
+                // Handle 'reasoning' events from backend (alias for 'thinking')
+                case 'reasoning':
                 case 'thinking':
-                  fullReasoning += `\n[Step ${event.data?.step || '?'}] ${event.data?.reasoning || ''}`;
+                  fullReasoning += `\n[Step ${event.data?.step || '?'}] ${event.data?.reasoning || event.data?.content || ''}`;
                   set((state) => ({
                     reasoningSteps: [
                       ...state.reasoningSteps.filter((s) => s.step !== event.data?.step),
-                      { step: event.data?.step || state.reasoningSteps.length + 1, reasoning: event.data?.reasoning || '' },
+                      { step: event.data?.step || state.reasoningSteps.length + 1, reasoning: event.data?.reasoning || event.data?.content || '' },
                     ],
                   }));
                   break;
@@ -207,12 +209,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   }
                   break;
 
+                // 'final' events also carry content — emit as chunk first
                 case 'final':
+                case 'thinking_done':
                   if (!hasFinalized) {
-                    fullContent = event.data?.content || fullContent;
-                    fullReasoning = event.data?.reasoning || fullReasoning;
-                    set({ streamingContent: fullContent });
-                    hasFinalized = true;
+                    const incoming = event.type === 'final' ? event.data?.content : event.data?.reasoning;
+                    if (incoming) {
+                      fullContent += incoming;
+                      set({ streamingContent: fullContent });
+                    }
+                    if (event.type === 'final') {
+                      fullReasoning = event.data?.reasoning || fullReasoning;
+                      hasFinalized = true;
+                    }
                   }
                   break;
 

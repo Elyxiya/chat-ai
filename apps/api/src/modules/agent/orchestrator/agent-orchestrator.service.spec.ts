@@ -205,4 +205,66 @@ describe('AgentOrchestrator', () => {
       expect(mockMemory.clearShortTermMemory).toHaveBeenCalledWith('user-1');
     });
   });
+
+  describe('Edge Cases', () => {
+    it('EDGE-ORCH-01: should handle empty user message', async () => {
+      mockPlanner.classifyIntent.mockResolvedValue({ type: 'simple', confidence: 0.9 });
+      mockPlanner.executeReAct.mockResolvedValue({ type: 'final', content: '', metadata: {} });
+
+      const result = await orchestrator.process('user-1', '');
+
+      expect(result).toBeDefined();
+    });
+
+    it('EDGE-ORCH-02: should handle memory service being unavailable', async () => {
+      mockPlanner.classifyIntent.mockRejectedValue(new Error('Memory error'));
+
+      const result = await orchestrator.process('user-1', 'Hello');
+
+      expect(result.type).toBe('error');
+    });
+
+    it('EDGE-ORCH-03: should handle streaming with no chunks', async () => {
+      mockPlanner.classifyIntent.mockResolvedValue({ type: 'simple', confidence: 0.9 });
+      mockPlanner.streamReAct.mockImplementation(async function* () {
+        return;
+      });
+
+      const chunks: string[] = [];
+      for await (const chunk of orchestrator.streamProcess('user-1', 'Hello')) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual([]);
+    });
+
+    it('EDGE-ORCH-04: should handle streaming with COMPLEX intent', async () => {
+      mockPlanner.classifyIntent.mockResolvedValue({ type: 'complex', confidence: 0.8 });
+      mockPlanner.streamPlanAndExecute.mockImplementation(async function* () {
+        yield 'Planning';
+        yield ' done';
+      });
+
+      const chunks: string[] = [];
+      for await (const chunk of orchestrator.streamProcess('user-1', 'Complex task')) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.length).toBeGreaterThan(0);
+    });
+
+    it('EDGE-ORCH-05: should handle events stream with empty events', async () => {
+      mockPlanner.classifyIntent.mockResolvedValue({ type: 'simple', confidence: 0.9 });
+      mockPlanner.streamReActWithEvents.mockImplementation(async function* () {
+        return;
+      });
+
+      const events: any[] = [];
+      for await (const event of orchestrator.streamProcessWithEvents('user-1', 'Hi', undefined, 'default')) {
+        events.push(event);
+      }
+
+      expect(events.length).toBeGreaterThan(0);
+    });
+  });
 });

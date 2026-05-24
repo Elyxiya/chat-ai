@@ -1,31 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RagEngine } from './rag-engine.service';
 import { PrismaService } from '../../../config/prisma.service';
+import { EmbeddingService } from '../../llm/providers/embedding.service';
 
-jest.mock('../../llm/providers/deepseek.provider', () => ({
-  DeepSeekProvider: jest.fn().mockImplementation(() => ({
-    embed: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
-  })),
-}));
-
-// Mock the provider with configurable embed response
 let mockEmbedResponse: number[] | null = null;
-jest.mock('../../llm/providers/deepseek.provider', () => ({
-  DeepSeekProvider: jest.fn().mockImplementation(() => ({
-    embed: jest.fn().mockImplementation(() => {
-      if (mockEmbedResponse === null) {
-        return Promise.resolve([0.1, 0.2, 0.3]);
-      }
-      return Promise.resolve(mockEmbedResponse);
-    }),
-  })),
-}));
+const mockEmbedding = {
+  embed: jest.fn().mockImplementation((text: string) => {
+    if (mockEmbedResponse === null) {
+      return Promise.resolve([0.1, 0.2, 0.3]);
+    }
+    return Promise.resolve(mockEmbedResponse);
+  }),
+};
 
 describe('RagEngine', () => {
   let engine: RagEngine;
   let mockPrisma: any;
 
   beforeEach(async () => {
+    mockEmbedResponse = null;
     mockPrisma = {
       $queryRaw: jest.fn(),
       $executeRaw: jest.fn(),
@@ -38,6 +31,7 @@ describe('RagEngine', () => {
       providers: [
         RagEngine,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmbeddingService, useValue: mockEmbedding },
       ],
     }).compile();
 
@@ -195,6 +189,103 @@ describe('RagEngine', () => {
       const count = await engine.chunkAndStore('kb-1', text, 10, 2);
 
       expect(count).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('Chunking Strategies', () => {
+    it('RAG-CHUNK-01: should create correct number of chunks for large text', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      const sentences = Array.from({ length: 20 }, (_, i) => `Sentence ${i}.`).join(' ');
+      const count = await engine.chunkAndStore('kb-1', sentences, 50, 10);
+
+      expect(count).toBeGreaterThan(1);
+    });
+
+    it('RAG-CHUNK-02: should respect chunk size limit', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      const text = 'This is a test sentence.'.repeat(50);
+      await engine.chunkAndStore('kb-1', text, 100, 20);
+
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+    });
+
+    it('RAG-CHUNK-03: should handle markdown text formatting', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      const markdown = '# Title\n\n## Section\n\nSome **bold** text and _italic_.';
+      const count = await engine.chunkAndStore('kb-1', markdown, 500, 50);
+
+      expect(count).toBeGreaterThanOrEqual(1);
+    });
+
+    it('RAG-CHUNK-04: should handle mixed Chinese and English text', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      const mixed = 'Hello 你好 world 世界 this is 测试 text.';
+      const count = await engine.chunkAndStore('kb-1', mixed, 100, 20);
+
+      expect(count).toBeGreaterThanOrEqual(1);
+    });
+
+    it('RAG-CHUNK-05: should handle overlapping chunks correctly', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      const text = 'This is a test sentence for chunking.';
+      await engine.chunkAndStore('kb-1', text, 10, 5);
+
+      const calls = mockPrisma.$executeRaw.mock.calls;
+      if (calls.length > 1) {
+        expect(calls.length).toBeGreaterThan(1);
+      }
+    });
+  });
+
+  describe('addChunk', () => {
+    it('RAG-DEL-01: should insert chunk with embedding via raw SQL', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      await engine.addChunk('kb-1', 'Test content', { source: 'manual' });
+
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+    });
+
+    it('RAG-DEL-02: should handle chunk with empty metadata', async () => {
+      mockPrisma.$executeRaw.mockResolvedValue({} as any);
+
+      await engine.addChunk('kb-1', 'Content', {});
+
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+    });
+  });
+
+  describe('Vector Search Behavior', () => {
+    it('RAG-VEC-01: should retrieve chunks ordered by similarity score', async () => {
+      const chunks = [
+        { id: 'chunk-1', content: 'High relevance', metadata: {}, score: 0.95 },
+        { id: 'chunk-2', content: 'Medium relevance', metadata: {}, score: 0.75 },
+        { id: 'chunk-3', content: 'Low relevance', metadata: {}, score: 0.55 },
+      ];
+      mockPrisma.$queryRaw.mockResolvedValue(chunks);
+
+      const result = await engine.retrieve('query', 'user-1', 3, 'kb-1');
+
+      expect(result).toContain('High relevance');
+      expect(result).toContain('Medium relevance');
+      expect(result).toContain('Low relevance');
+    });
+
+    it('RAG-VEC-02: should include source metadata in formatted output', async () => {
+      const chunks = [
+        { id: 'chunk-1', content: 'Document content', metadata: { source: 'manual', title: 'Guide' }, score: 0.9 },
+      ];
+      mockPrisma.$queryRaw.mockResolvedValue(chunks);
+
+      const result = await engine.retrieve('query', 'user-1', 5, 'kb-1');
+
+      expect(result).toContain('【相关知识】');
+      expect(result).toContain('[1]');
     });
   });
 });

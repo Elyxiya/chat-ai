@@ -12,6 +12,7 @@ import { UserModule } from '../user/user.module';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
+      global: true,
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
         const secret = config.get<string>('JWT_SECRET');

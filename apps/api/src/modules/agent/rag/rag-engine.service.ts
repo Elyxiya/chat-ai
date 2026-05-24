@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../config/prisma.service';
+import { EmbeddingService } from '../../llm/providers/embedding.service';
 import { RagChunk } from '../types';
 
 @Injectable()
 export class RagEngine {
   private readonly logger = new Logger(RagEngine.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly embedding: EmbeddingService,
+  ) {}
 
   async retrieve(
     query: string,
@@ -15,10 +19,7 @@ export class RagEngine {
     kbId?: string,
   ): Promise<string> {
     try {
-      const { DeepSeekProvider } = await import('../../llm/providers/deepseek.provider');
-      const provider = new DeepSeekProvider();
-
-      const queryEmbedding = await provider.embed(query);
+      const queryEmbedding = await this.embedding.embed(query);
       if (!queryEmbedding || queryEmbedding.length === 0) {
         return '';
       }
@@ -55,9 +56,7 @@ export class RagEngine {
     topK = 5,
   ): Promise<RagChunk[]> {
     try {
-      const { DeepSeekProvider } = await import('../../llm/providers/deepseek.provider');
-      const provider = new DeepSeekProvider();
-      const queryEmbedding = await provider.embed(query);
+      const queryEmbedding = await this.embedding.embed(query);
 
       if (!queryEmbedding || queryEmbedding.length === 0) {
         return [];
@@ -92,9 +91,7 @@ export class RagEngine {
     metadata: Record<string, any> = {},
   ): Promise<void> {
     try {
-      const { DeepSeekProvider } = await import('../../llm/providers/deepseek.provider');
-      const provider = new DeepSeekProvider();
-      const embedding = await provider.embed(content);
+      const embedding = await this.embedding.embed(content);
 
       await this.prisma.$executeRaw`
         INSERT INTO knowledge_chunks (id, kb_id, content, embedding, chunk_index, metadata, created_at)

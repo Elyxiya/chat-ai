@@ -32,7 +32,7 @@ export default function EnhancedAgentPage() {
     if (!input.trim() || isStreaming) return;
     const content = input.trim();
     setInput('');
-    await streamMessage(content, mode === 'plan' ? 'plan-execute' : 'react');
+    await streamMessage(content, mode === 'plan' ? 'planner' : 'react');
   }, [input, isStreaming, mode, streamMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

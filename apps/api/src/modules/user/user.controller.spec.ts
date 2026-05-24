@@ -71,5 +71,45 @@ describe('UserController', () => {
 
       expect((result as any).data.avatarUrl).toContain('new-avatar.png');
     });
+
+    it('should pass file to service', async () => {
+      const mockFile = { filename: 'test.png' } as Express.Multer.File;
+      mockUserService.uploadAvatar.mockResolvedValue({ avatarUrl: '/uploads/avatars/test.png' });
+
+      await controller.uploadAvatar('user-1', mockFile);
+
+      expect(mockUserService.uploadAvatar).toHaveBeenCalledWith('user-1', mockFile);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('EDGE-USER-CTRL-01: should handle profile with no avatar', async () => {
+      const user = makeUser({ id: 'user-1', avatarUrl: null });
+      mockUserService.getProfile.mockResolvedValue(user);
+
+      const result = await controller.getProfile('user-1');
+
+      expect((result as any).data.avatarUrl).toBeNull();
+    });
+
+    it('EDGE-USER-CTRL-02: should handle profile update with only nickname', async () => {
+      const dto = { nickname: 'NewNick' };
+      const updated = makeUser({ nickname: 'NewNick' });
+      mockUserService.updateProfile.mockResolvedValue(updated);
+
+      const result = await controller.updateProfile('user-1', dto);
+
+      expect(mockUserService.updateProfile).toHaveBeenCalledWith('user-1', dto);
+    });
+
+    it('EDGE-USER-CTRL-03: should handle profile update with only bio', async () => {
+      const dto = { bio: 'New bio text' };
+      const updated = makeUser({ bio: 'New bio text' });
+      mockUserService.updateProfile.mockResolvedValue(updated);
+
+      const result = await controller.updateProfile('user-1', dto);
+
+      expect((result as any).data.bio).toBe('New bio text');
+    });
   });
 });

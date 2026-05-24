@@ -8,8 +8,10 @@ export default function GroupManagementPage() {
   const navigate = useNavigate();
   const { sessions } = useChatStore();
   const [members, setMembers] = useState<any[]>([]);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteResults, setInviteResults] = useState<any[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteSending, setInviteSending] = useState<Set<string>>(new Set());
 
   const session = sessions.find((s) => s.id === sessionId);
   const isGroup = session?.sessionType === 'group' || session?.sessionType === 'channel';
@@ -29,9 +31,26 @@ export default function GroupManagementPage() {
     loadMembers();
   }, [sessionId, isGroup]);
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim() || !sessionId) return;
-    setLoading(true);
+  const handleSearchInvite = async () => {
+    if (!inviteQuery.trim()) return;
+    setInviteLoading(true);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch(`/api/v1/chat/users/search?q=${encodeURIComponent(inviteQuery)}`, {
+        headers: { Authorization: `Bearer ${token || ''}` },
+      });
+      const data = await res.json();
+      const users = data.data || [];
+      const memberIds = new Set(members.map((m) => m.user?.id));
+      setInviteResults(users.filter((u: any) => !memberIds.has(u.id)));
+    } catch { /* ignore */ } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleInviteUser = async (userId: string) => {
+    if (!sessionId) return;
+    setInviteSending((prev) => new Set(prev).add(userId));
     try {
       const token = useAuthStore.getState().accessToken;
       await fetch(`/api/v1/chat/sessions/${sessionId}/members`, {
@@ -40,11 +59,15 @@ export default function GroupManagementPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token || ''}`,
         },
-        body: JSON.stringify({ email: inviteEmail }),
+        body: JSON.stringify({ userIds: [userId] }),
       });
-      setInviteEmail('');
+      setInviteResults((prev) => prev.filter((u) => u.id !== userId));
     } catch { /* ignore */ } finally {
-      setLoading(false);
+      setInviteSending((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
     }
   };
 
@@ -123,21 +146,50 @@ export default function GroupManagementPage() {
 
       {/* Main */}
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-        <div>
-          <h3 className="text-sm font-medium mb-2">Invite by Email</h3>
-          <div className="flex gap-2">
+        <div className="mb-4">
+          <h3 className="text-sm font-medium mb-2">Search to Invite</h3>
+          <div className="flex gap-2 mb-3">
             <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="friend@example.com"
+              type="text"
+              value={inviteQuery}
+              onChange={(e) => setInviteQuery(e.target.value)}
+              placeholder="Search by username or email..."
               className="input-field flex-1"
-              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearchInvite()}
             />
-            <button onClick={handleInvite} disabled={loading || !inviteEmail.trim()} className="btn-primary">
-              {loading ? '...' : 'Invite'}
+            <button onClick={handleSearchInvite} disabled={inviteLoading || !inviteQuery.trim()} className="btn-primary px-4">
+              {inviteLoading ? '...' : 'Search'}
             </button>
           </div>
+          {inviteResults.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {inviteResults.map((u) => (
+                <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-bg hover:bg-border transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <img
+                      src={u.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username}`}
+                      alt={u.username}
+                      className="w-8 h-8 rounded-full flex-shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{u.nickname || u.username}</p>
+                      <p className="text-xs text-text-secondary truncate">@{u.username}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleInviteUser(u.id)}
+                    disabled={inviteSending.has(u.id)}
+                    className="btn-primary px-3 py-1 text-xs flex-shrink-0"
+                  >
+                    {inviteSending.has(u.id) ? '...' : 'Invite'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {inviteResults.length === 0 && inviteQuery.trim() && !inviteLoading && (
+            <p className="text-xs text-text-secondary">No users found</p>
+          )}
         </div>
 
         <div>

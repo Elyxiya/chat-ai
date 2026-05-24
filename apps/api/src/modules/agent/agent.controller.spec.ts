@@ -32,7 +32,9 @@ describe('AgentController', () => {
       setHeader: jest.fn(),
       write: jest.fn(),
       end: jest.fn(),
+      flushHeaders: jest.fn(),
       status: jest.fn().mockReturnThis(),
+      socket: { setNoDelay: jest.fn() } as any,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -55,7 +57,7 @@ describe('AgentController', () => {
   });
 
   describe('chat', () => {
-    it('should send message and return agent response', async () => {
+    it('AGENT-CTRL-01: should send message and return agent response', async () => {
       mockOrchestrator.process.mockResolvedValue({
         type: 'final',
         content: 'Hello! How can I help you?',
@@ -67,7 +69,7 @@ describe('AgentController', () => {
       expect((result as any).data.content).toBe('Hello! How can I help you?');
     });
 
-    it('should pass sessionId to orchestrator', async () => {
+    it('AGENT-CTRL-02: should pass sessionId to orchestrator', async () => {
       mockOrchestrator.process.mockResolvedValue({ type: 'final', content: 'Response' });
 
       await controller.chat('user-1', { message: 'Hello', sessionId: 'session-1' });
@@ -77,7 +79,7 @@ describe('AgentController', () => {
   });
 
   describe('chatStream', () => {
-    it('should set correct SSE headers', async () => {
+    it('AGENT-CTRL-03: should set correct SSE headers', async () => {
       mockOrchestrator.streamProcess.mockImplementation(async function* () {
         yield 'Hello';
         yield ' world';
@@ -90,7 +92,7 @@ describe('AgentController', () => {
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
     });
 
-    it('should send start event', async () => {
+    it('AGENT-CTRL-04: should send start event', async () => {
       mockOrchestrator.streamProcess.mockImplementation(async function* () {
         yield 'chunk';
       });
@@ -100,7 +102,7 @@ describe('AgentController', () => {
       expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"start"'));
     });
 
-    it('should stream chunks to response', async () => {
+    it('AGENT-CTRL-05: should stream chunks to response', async () => {
       mockOrchestrator.streamProcess.mockImplementation(async function* () {
         yield 'Hello';
         yield ' there';
@@ -111,7 +113,7 @@ describe('AgentController', () => {
       expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('Hello'));
     });
 
-    it('should send done event at end', async () => {
+    it('AGENT-CTRL-06: should send done event at end', async () => {
       mockOrchestrator.streamProcess.mockImplementation(async function* () {
         yield 'Done';
       });
@@ -124,7 +126,7 @@ describe('AgentController', () => {
   });
 
   describe('getHistory', () => {
-    it('should return conversation history', async () => {
+    it('AGENT-CTRL-07: should return conversation history', async () => {
       const history = [
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi' },
@@ -138,7 +140,7 @@ describe('AgentController', () => {
   });
 
   describe('clearMemory', () => {
-    it('should clear agent memory', async () => {
+    it('AGENT-CTRL-08: should clear agent memory', async () => {
       mockOrchestrator.clearMemory.mockResolvedValue(undefined);
 
       const result = await controller.clearMemory('user-1');
@@ -149,7 +151,7 @@ describe('AgentController', () => {
   });
 
   describe('summarizeMemory', () => {
-    it('should summarize and compress memory', async () => {
+    it('AGENT-CTRL-09: should summarize and compress memory', async () => {
       mockMemory.summarizeAndCompress.mockResolvedValue(undefined);
 
       const result = await controller.summarizeMemory('user-1');
@@ -159,7 +161,7 @@ describe('AgentController', () => {
   });
 
   describe('getStatus', () => {
-    it('should return AI service status', async () => {
+    it('AGENT-CTRL-10: should return AI service status', async () => {
       const result = await controller.getStatus();
 
       expect((result as any).data).toHaveProperty('online', true);

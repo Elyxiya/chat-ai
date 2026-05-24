@@ -373,4 +373,147 @@ describe('ChatGateway', () => {
       expect(gateway.getOnlineCount()).toBe(0);
     });
   });
+
+  describe('Edge Cases', () => {
+    it('WS-14: should emit DM-type message only to session room (not globally)', async () => {
+      const socket = createMockSocket({
+        data: {
+          user: { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'online', userType: 'human' },
+        },
+      });
+      const message: any = {
+        id: 'msg-dm',
+        content: 'Direct message',
+        senderId: 'user-1',
+        sessionId: 'dm-session',
+        reactions: [],
+        sender: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockGatewayService.sendMessage.mockResolvedValue(message);
+
+      const payload = {
+        type: WsMessageType.TEXT,
+        data: { sessionId: 'dm-session', content: 'Direct message' },
+      };
+
+      await gateway.handleMessage(payload, socket);
+
+      // Should broadcast to session room, not globally
+      expect(gateway.server.to).toHaveBeenCalledWith('session:dm-session');
+      expect(gateway.server.emit).toHaveBeenCalledWith('message', message);
+    });
+
+    it('WS-08: should not broadcast message to clients outside the session room', async () => {
+      const socket = createMockSocket({
+        data: {
+          user: { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'online', userType: 'human' },
+        },
+      });
+      const message: any = {
+        id: 'msg-private',
+        content: 'Private',
+        senderId: 'user-1',
+        sessionId: 'session-1',
+        reactions: [],
+        sender: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockGatewayService.sendMessage.mockResolvedValue(message);
+
+      const payload = {
+        type: WsMessageType.TEXT,
+        data: { sessionId: 'session-1', content: 'Private' },
+      };
+
+      await gateway.handleMessage(payload, socket);
+
+      // server.to('session:session-1') was called, not a different room
+      expect(gateway.server.to).toHaveBeenCalledWith('session:session-1');
+      expect(gateway.server.to).not.toHaveBeenCalledWith('session:other-session');
+    });
+
+    it('WS-11: should handle READ receipt broadcast to session room', async () => {
+      const socket = createMockSocket({
+        data: {
+          user: { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'online', userType: 'human' },
+        },
+      });
+      mockGatewayService.markRead.mockResolvedValue(undefined);
+
+      const payload = {
+        type: WsMessageType.READ,
+        data: { sessionId: 'session-1', lastMessageId: 'msg-5' },
+      };
+
+      await gateway.handleMessage(payload, socket);
+
+      expect(mockGatewayService.markRead).toHaveBeenCalledWith('user-1', 'session-1', 'msg-5');
+      // Read receipt is sent to others in room (client.to), not back to sender
+      expect(socket.to).toHaveBeenCalledWith('session:session-1');
+    });
+
+    it('EDGE-GW-01: should handle emitToUser when user has no sockets', () => {
+      gateway.emitToUser('nonexistent-user', 'event', { data: 'test' });
+
+      expect(gateway.server.to).not.toHaveBeenCalled();
+    });
+
+    it('EDGE-GW-02: should only call setUserOffline once when last socket disconnects', async () => {
+      const mockUser = { id: 'user-1', username: 'testuser' };
+      (gateway as any).userSockets.set('user-1', new Set(['socket-1', 'socket-2']));
+      mockGatewayService.setUserOffline.mockResolvedValue(undefined);
+
+      const socket1 = createMockSocket({ id: 'socket-1', data: { user: mockUser } });
+      const socket2 = createMockSocket({ id: 'socket-2', data: { user: mockUser } });
+
+      await gateway.handleDisconnect(socket1);
+      // After socket1 disconnects, user-1 still has socket-2 → not offline yet
+      expect(mockGatewayService.setUserOffline).not.toHaveBeenCalled();
+
+      await gateway.handleDisconnect(socket2);
+      // After socket2 disconnects, user-1 has no more sockets → offline
+      expect(mockGatewayService.setUserOffline).toHaveBeenCalledTimes(1);
+    });
+
+    it('EDGE-GW-03: should handle mention event without existing user socket', async () => {
+      const socket = createMockSocket({
+        data: {
+          user: { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'online', userType: 'human' },
+        },
+      });
+      const message: any = {
+        id: 'msg-1',
+        content: 'Hello @nonexistent',
+        senderId: 'user-1',
+        sessionId: 'session-1',
+        reactions: [],
+        sender: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockGatewayService.sendMessage.mockResolvedValue(message);
+
+      const payload = {
+        type: WsMessageType.TEXT,
+        data: { sessionId: 'session-1', content: 'Hello @nonexistent', mentions: ['nonexistent'] },
+      };
+
+      await gateway.handleMessage(payload, socket);
+
+      expect(gateway.server.emit).toHaveBeenCalledWith('message', message);
+    });
+
+    it('EDGE-GW-04: should handle handleJoinSession without sessionId', async () => {
+      const socket = createMockSocket({
+        data: { user: { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'online', userType: 'human' } },
+      });
+
+      await gateway.handleJoinSession({ sessionId: '' }, socket);
+
+      expect(socket.join).not.toHaveBeenCalled();
+    });
+  });
 });

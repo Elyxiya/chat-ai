@@ -61,7 +61,12 @@ export class AgentController {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
+    // Disable Nagle's algorithm for true streaming — each res.write() flushes immediately
+    res.socket?.setNoDelay(true);
+
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId: body.sessionId })}\n\n`);
+    // Flush headers so the client receives the SSE content-type before data arrives
+    res.flushHeaders();
 
     try {
       const stream = this.agentOrchestrator.streamProcess(
@@ -108,7 +113,11 @@ export class AgentController {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
+    // Disable Nagle's algorithm for true streaming
+    res.socket?.setNoDelay(true);
+
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId: body.sessionId })}\n\n`);
+    res.flushHeaders();
 
     try {
       const stream = this.agentOrchestrator.streamProcessWithEvents(

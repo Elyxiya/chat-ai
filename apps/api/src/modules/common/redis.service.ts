@@ -30,7 +30,7 @@ export class RedisService implements OnModuleDestroy {
 
   async set(key: string, value: string, ttlMs?: number): Promise<void> {
     if (ttlMs) {
-      await this.client.set(key, value, 'PX', ttlMs);
+      await this.client.set(key, value, 'PX', Math.floor(ttlMs));
     } else {
       await this.client.set(key, value);
     }
@@ -45,7 +45,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async expire(key: string, seconds: number): Promise<void> {
-    await this.client.expire(key, seconds);
+    await this.client.expire(key, Math.floor(seconds));
   }
 
   async hset(key: string, field: string, value: string): Promise<void> {
@@ -78,16 +78,18 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
+    const s = Math.floor(start);
+    const e = Math.floor(stop);
     try {
-      const result = await this.client.lrange(key, start, stop);
+      const result = await this.client.lrange(key, s, e);
       return result;
-    } catch (err: any) {
-      throw err;
+    } catch {
+      return [];
     }
   }
 
   async ltrim(key: string, start: number, stop: number): Promise<void> {
-    await this.client.ltrim(key, start, stop);
+    await this.client.ltrim(key, Math.floor(start), Math.floor(stop));
   }
 
   async scan(cursor: string, pattern: string, count?: number): Promise<[string, string[]]> {

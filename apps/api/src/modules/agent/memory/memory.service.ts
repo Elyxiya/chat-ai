@@ -29,8 +29,10 @@ export class MemoryService {
 
   async getShortTermMemory(userId: string, limit = 50): Promise<any[]> {
     const key = `memory:short:${userId}`;
+    // Ensure stop is always a valid integer to avoid Redis protocol errors
+    const stop = Number.isFinite(limit) ? Math.floor(limit) - 1 : 49;
     try {
-      const raw = await this.redis.lrange(key, 0, limit - 1);
+      const raw = await this.redis.lrange(key, 0, stop);
       const parsed = raw.map((r) => {
         try {
           return JSON.parse(r);

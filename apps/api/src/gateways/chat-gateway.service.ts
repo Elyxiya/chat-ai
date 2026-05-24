@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { RedisService } from '../modules/common/redis.service';
 import { JwtService } from '@nestjs/jwt';
@@ -6,6 +6,8 @@ import { SendMessageDto } from '../modules/chat/dto/chat.dto';
 
 @Injectable()
 export class ChatGatewayService {
+  private readonly logger = new Logger(ChatGatewayService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -31,7 +33,11 @@ export class ChatGatewayService {
       where: { id: userId },
       data: { status: 'online', lastSeenAt: new Date() },
     });
-    await this.redis.set(`online:${userId}`, Date.now().toString(), 24 * 60 * 60 * 1000);
+    try {
+      await this.redis.set(`online:${userId}`, Date.now().toString(), 24 * 60 * 60 * 1000);
+    } catch (err: any) {
+      this.logger.warn(`setUserOnline Redis unavailable: ${err.message}`);
+    }
   }
 
   async setUserOffline(userId: string) {
@@ -39,7 +45,11 @@ export class ChatGatewayService {
       where: { id: userId },
       data: { status: 'offline' },
     });
-    await this.redis.del(`online:${userId}`);
+    try {
+      await this.redis.del(`online:${userId}`);
+    } catch (err: any) {
+      this.logger.warn(`setUserOffline Redis unavailable: ${err.message}`);
+    }
   }
 
   async canJoinSession(userId: string, sessionId: string): Promise<boolean> {

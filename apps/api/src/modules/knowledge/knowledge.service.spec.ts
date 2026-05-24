@@ -108,11 +108,20 @@ describe('KnowledgeService', () => {
       await expect(service.getBase('user-1', 'nonexistent')).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ForbiddenException for private base of another user', async () => {
+    it('RAG-12: should throw ForbiddenException for private base of another user', async () => {
       const kb = makeKnowledgeBase({ id: 'kb-1', ownerId: 'user-2', isPublic: false });
       mockPrisma.knowledgeBase.findUnique.mockResolvedValue(kb);
 
       await expect(service.getBase('user-1', 'kb-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('RAG-12: should allow access to public base owned by another user', async () => {
+      const kb = makeKnowledgeBase({ id: 'kb-public', ownerId: 'user-2', isPublic: true });
+      mockPrisma.knowledgeBase.findUnique.mockResolvedValue(kb);
+
+      const result = await service.getBase('user-1', 'kb-public');
+
+      expect(result.id).toBe('kb-public');
     });
   });
 
@@ -216,6 +225,16 @@ describe('KnowledgeService', () => {
       expect(result.length).toBeGreaterThan(0);
       expect(mockRagEngine.retrieveChunks).toHaveBeenCalled();
     });
+
+    it('RAG-13: should return empty array when searching with no matching keywords', async () => {
+      const bases = [{ id: 'kb-1', name: 'Base 1' }];
+      mockPrisma.knowledgeBase.findMany.mockResolvedValue(bases);
+      mockRagEngine.retrieveChunks.mockResolvedValue([]);
+
+      const result = await service.search('user-1', 'nonexistent_keyword_xzy');
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('listDocuments', () => {
@@ -226,6 +245,14 @@ describe('KnowledgeService', () => {
       const result = await service.listDocuments('kb-1');
 
       expect(result).toHaveLength(2);
+    });
+
+    it('should return empty array for KB with no documents', async () => {
+      mockPrisma.knowledgeDocument.findMany.mockResolvedValue([]);
+
+      const result = await service.listDocuments('kb-empty');
+
+      expect(result).toEqual([]);
     });
   });
 

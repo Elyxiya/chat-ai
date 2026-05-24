@@ -244,6 +244,7 @@ export class PlanningEngine {
           yield { type: 'reasoning', data: { step: stepCount, content: event.data } };
         } else {
           fullResponse += event.data;
+          yield { type: 'chunk', data: { content: event.data } };
         }
       }
 

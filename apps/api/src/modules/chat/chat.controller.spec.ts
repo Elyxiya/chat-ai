@@ -246,4 +246,54 @@ describe('ChatController', () => {
       expect((result as any).data).toEqual(users);
     });
   });
+
+  describe('POST /chat/sessions/:id/read', () => {
+    it('CHAT-CTRL-20: should mark session as read', async () => {
+      mockChatService.markAsRead.mockResolvedValue(undefined);
+
+      const result = await controller.markRead('user-1', { sessionId: 'session-1', lastMessageId: '' });
+
+      expect(mockChatService.markAsRead).toHaveBeenCalledWith('user-1', 'session-1', '');
+      expect((result as any).message).toBe('Success');
+    });
+
+    it('should pass lastMessageId to service', async () => {
+      mockChatService.markAsRead.mockResolvedValue(undefined);
+
+      await controller.markRead('user-1', { sessionId: 'session-1', lastMessageId: 'msg-5' });
+
+      expect(mockChatService.markAsRead).toHaveBeenCalledWith('user-1', 'session-1', 'msg-5');
+    });
+  });
+
+  describe('POST /chat/sessions/:id/messages/:messageId/read', () => {
+    it('CHAT-CTRL-21: should mark message as read', async () => {
+      mockChatService.markAsRead.mockResolvedValue(undefined);
+
+      const result = await controller.markRead('user-1', { sessionId: 'session-1', lastMessageId: 'msg-1' });
+
+      expect(mockChatService.markAsRead).toHaveBeenCalledWith('user-1', 'session-1', 'msg-1');
+      expect((result as any).message).toBe('Success');
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('EDGE-CHAT-CTRL-01: should handle create session with empty memberIds', async () => {
+      const dto = { sessionType: 'group' as const, name: 'New Group', memberIds: [] };
+      const session = makeSession({ id: 'group-new', sessionType: 'group', name: 'New Group' });
+      mockChatService.createSession.mockResolvedValue(session);
+
+      const result = await controller.createSession('user-1', dto);
+
+      expect((result as any).data.name).toBe('New Group');
+    });
+
+    it('EDGE-CHAT-CTRL-02: should handle getMessages with no query params', async () => {
+      mockChatService.getMessages.mockResolvedValue([]);
+
+      await controller.getMessages('user-1', 'session-1', {});
+
+      expect(mockChatService.getMessages).toHaveBeenCalled();
+    });
+  });
 });

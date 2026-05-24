@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
@@ -24,6 +25,7 @@ import {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly BCRYPT_ROUNDS = 12;
   private readonly CODE_TTL = 300;
   private readonly REFRESH_TTL_DAYS = 7;
@@ -138,12 +140,22 @@ export class AuthService {
 
   async sendVerificationCode(email: string): Promise<void> {
     const code = crypto.randomBytes(3).toString('hex').toUpperCase();
-    await this.redis.set(`verify:${email}`, code, this.CODE_TTL * 1000);
+    try {
+      await this.redis.set(`verify:${email}`, code, this.CODE_TTL * 1000);
+    } catch (err: any) {
+      this.logger.warn(`sendVerificationCode Redis unavailable: ${err.message}`);
+    }
     console.warn(`[DEV] Verification code for ${email}: ${code}`);
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    const storedCode = await this.redis.get(`verify:${dto.email}`);
+    let storedCode: string | null = null;
+    try {
+      storedCode = await this.redis.get(`verify:${dto.email}`);
+    } catch (err: any) {
+      this.logger.warn(`resetPassword Redis unavailable: ${err.message}`);
+      throw new BadRequestException('Verification service temporarily unavailable');
+    }
 
     if (!storedCode || storedCode !== dto.code.toUpperCase()) {
       throw new BadRequestException('Invalid verification code');
@@ -168,7 +180,11 @@ export class AuthService {
       where: { userId: user.id },
     });
 
-    await this.redis.del(`verify:${dto.email}`);
+    try {
+      await this.redis.del(`verify:${dto.email}`);
+    } catch (err: any) {
+      this.logger.warn(`resetPassword cleanup Redis unavailable: ${err.message}`);
+    }
   }
 
   getGithubAuthUrl(state?: string): string {

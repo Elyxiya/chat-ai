@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { RedisService } from '../common/redis.service';
 import {
@@ -10,6 +10,8 @@ import {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -426,11 +428,16 @@ export class ChatService {
     const userIds: string[] = [];
     let cursor = '0';
 
-    do {
-      const [nextCursor, keys] = await this.redis.scan(cursor, 'online:*', 100);
-      cursor = nextCursor;
-      userIds.push(...keys.map((k: string) => k.replace('online:', '')));
-    } while (cursor !== '0');
+    try {
+      do {
+        const [nextCursor, keys] = await this.redis.scan(cursor, 'online:*', 100);
+        cursor = nextCursor;
+        userIds.push(...keys.map((k: string) => k.replace('online:', '')));
+      } while (cursor !== '0');
+    } catch (err: any) {
+      this.logger.warn(`getOnlineUsers Redis unavailable: ${err.message}`);
+      return [];
+    }
 
     if (userIds.length === 0) return [];
 

@@ -19,7 +19,6 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 apiClient.interceptors.response.use(
   (response) => {
-    console.log('[Interceptor] response.data:', response.data);
     return response.data;
   },
   async (error: AxiosError<{ message: string }>) => {
@@ -99,6 +98,12 @@ export const chatApi = {
   searchUsers: (query: string) =>
     apiClient.get('/chat/users/search', { params: { q: query } }),
   getOnlineUsers: () => apiClient.get('/chat/online-users'),
+  manageFriend: (friendId: string, data: { action: 'request' | 'accept' | 'reject' | 'block' }) =>
+    apiClient.post(`/chat/friends/${friendId}`, data),
+  addReaction: (messageId: string, emoji: string) =>
+    apiClient.post('/chat/reactions', { messageId, emoji }),
+  removeReaction: (messageId: string, emoji: string) =>
+    apiClient.delete('/chat/reactions', { data: { messageId, emoji } }),
 };
 
 export const agentApi = {

@@ -180,6 +180,16 @@ describe('AuthController', () => {
   });
 
   describe('oauth', () => {
+    it('AUTH-CTRL-10: should return Google OAuth URL', async () => {
+      mockAuthService.getGoogleAuthUrl.mockReturnValue(
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=test',
+      );
+
+      const result = await controller.googleAuth({ state: 'test-state' });
+      expect((result as any).data).toHaveProperty('url');
+      expect((result as any).data).toHaveProperty('state');
+    });
+
     it('AUTH-CTRL-15: should return GitHub OAuth URL', async () => {
       mockAuthService.getGithubAuthUrl.mockReturnValue(
         'https://github.com/login/oauth/authorize?client_id=test',
@@ -191,15 +201,44 @@ describe('AuthController', () => {
       expect((result as any).data).toHaveProperty('state');
     });
 
-    it('should return Google OAuth URL', async () => {
-      mockAuthService.getGoogleAuthUrl.mockReturnValue(
-        'https://accounts.google.com/o/oauth2/v2/auth?client_id=test',
-      );
+    it('AUTH-CTRL-17: should generate random state when not provided', async () => {
+      mockAuthService.getGithubAuthUrl.mockReturnValue('https://github.com/login/oauth/authorize');
 
-      const result = await controller.googleAuth({ state: 'test-state' });
+      const result = await controller.githubAuth({});
 
-      expect((result as any).data).toHaveProperty('url');
       expect((result as any).data).toHaveProperty('state');
+      expect((result as any).data.state).toBeTruthy();
+    });
+  });
+
+  describe('oauth callback', () => {
+    it('AUTH-CTRL-18: should return tokens on successful GitHub callback', async () => {
+      const tokens = { accessToken: 'token', refreshToken: 'refresh', user: {} };
+      mockAuthService.handleGithubCallback.mockResolvedValue(tokens);
+
+      const result = await controller.githubCallback({ code: 'github-code' });
+
+      expect(mockAuthService.handleGithubCallback).toHaveBeenCalledWith('github-code', undefined);
+      expect((result as any).data).toEqual(tokens);
+    });
+
+    it('AUTH-CTRL-19: should return tokens on successful Google callback', async () => {
+      const tokens = { accessToken: 'token', refreshToken: 'refresh', user: {} };
+      mockAuthService.handleGoogleCallback.mockResolvedValue(tokens);
+
+      const result = await controller.googleCallback({ code: 'google-code' });
+
+      expect(mockAuthService.handleGoogleCallback).toHaveBeenCalledWith('google-code', undefined);
+      expect((result as any).data).toEqual(tokens);
+    });
+
+    it('should pass state parameter to GitHub callback', async () => {
+      const tokens = { accessToken: 'token', refreshToken: 'refresh', user: {} };
+      mockAuthService.handleGithubCallback.mockResolvedValue(tokens);
+
+      await controller.githubCallback({ code: 'github-code', state: 'test-state' });
+
+      expect(mockAuthService.handleGithubCallback).toHaveBeenCalledWith('github-code', 'test-state');
     });
   });
 
@@ -210,6 +249,14 @@ describe('AuthController', () => {
       const result = await controller.deleteAccount('user-1', { password: 'Password123' });
 
       expect((result as any).message).toBe('Account deleted');
+    });
+
+    it('should pass password to service', async () => {
+      mockAuthService.deleteAccount.mockResolvedValue(undefined);
+
+      await controller.deleteAccount('user-1', { password: 'Password123' });
+
+      expect(mockAuthService.deleteAccount).toHaveBeenCalledWith('user-1', 'Password123');
     });
   });
 });
