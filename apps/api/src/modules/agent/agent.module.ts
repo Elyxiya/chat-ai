@@ -8,7 +8,6 @@ import { AgentController } from './agent.controller';
 import { LLMModule } from '../llm/llm.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { ChatModule } from '../chat/chat.module';
-import { DeepSeekProvider } from '../llm/providers/deepseek.provider';
 
 @Module({
   imports: [LLMModule, KnowledgeModule, ChatModule],
@@ -19,7 +18,6 @@ import { DeepSeekProvider } from '../llm/providers/deepseek.provider';
     MemoryService,
     ToolRegistry,
     RagEngine,
-    DeepSeekProvider,
   ],
   exports: [AgentOrchestrator, ToolRegistry, MemoryService],
 })

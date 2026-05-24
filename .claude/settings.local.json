@@ -3,7 +3,12 @@
     "allow": [
       "PowerShell($count = @\\(Get-ChildItem -Path \"E:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\node_modules\" -Directory -ErrorAction SilentlyContinue\\).Count; Write-Host \"Root node_modules dirs: $count\"; $libs = Get-ChildItem -Path \"E:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\libs\" -Directory -ErrorAction SilentlyContinue; if \\($libs\\) { $libs | Select-Object Name } else { Write-Host \"No libs directory found\" })",
       "PowerShell(if \\(Test-Path \"E:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\node_modules\"\\) { $items = Get-ChildItem \"E:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\node_modules\"; Write-Host \"Count: $\\($items.Count\\)\"; $items | Select-Object Name, Mode | Format-Table -AutoSize } else { Write-Host \"node_modules does not exist\" })",
-      "PowerShell(pnpm *)"
+      "PowerShell(pnpm *)",
+      "WebSearch",
+      "WebFetch(domain:api.deepseek.com)",
+      "WebFetch(domain:api-docs.deepseek.com)",
+      "PowerShell(git add --all -- ':!.claude/settings.local.json')",
+      "PowerShell(git status --short | Select-String \"^[AM]|^\\\\?\\\\? \" | ForEach-Object { $_.Line })"
     ]
   }
 }

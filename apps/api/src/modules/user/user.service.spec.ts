@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { PrismaService } from '../../config/prisma.service';
+import { MinioService } from '../storage/minio.service';
 
 describe('UserService', () => {
   let service: UserService;
   let mockPrisma: any;
+  let mockMinio: any;
 
   beforeEach(async () => {
     mockPrisma = {
@@ -15,10 +17,17 @@ describe('UserService', () => {
       },
     };
 
+    mockMinio = {
+      uploadFile: jest.fn().mockResolvedValue({ url: 'http://minio/avatars/test.png', objectName: 'avatars/test.png', bucket: 'minichat-files' }),
+      deleteFile: jest.fn(),
+      fileExists: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: MinioService, useValue: mockMinio },
       ],
     }).compile();
 
@@ -131,24 +140,46 @@ describe('UserService', () => {
   });
 
   describe('uploadAvatar', () => {
-    it('USER-SVC-03: should upload avatar and return URL', async () => {
-      const mockFile = { filename: 'avatar-123.png' } as Express.Multer.File;
+    it('USER-SVC-03: should upload avatar to MinIO and return URL', async () => {
+      const mockFile = {
+        buffer: Buffer.from('fake-image-data'),
+        originalname: 'avatar.png',
+        mimetype: 'image/png',
+        size: 1024,
+      } as Express.Multer.File;
+
       mockPrisma.user.update.mockResolvedValue({
         id: 'user-1',
         username: 'testuser',
         email: 'test@example.com',
         nickname: 'Test',
         bio: null,
-        avatarUrl: '/uploads/avatars/avatar-123.png',
+        avatarUrl: 'http://minio/avatars/test.png',
       });
 
       const result = await service.uploadAvatar('user-1', mockFile);
 
-      expect(result.avatarUrl).toContain('/uploads/avatars/');
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: { avatarUrl: '/uploads/avatars/avatar-123.png' },
-      });
+      expect(result.avatarUrl).toBe('http://minio/avatars/test.png');
+      expect(mockMinio.uploadFile).toHaveBeenCalledWith(
+        mockFile.buffer,
+        expect.stringContaining('avatars/user-1/'),
+        'image/png',
+      );
+    });
+
+    it('should throw BadRequestException when no file provided', async () => {
+      await expect(service.uploadAvatar('user-1', null as any)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for non-image file', async () => {
+      const mockFile = {
+        buffer: Buffer.from('data'),
+        originalname: 'file.pdf',
+        mimetype: 'application/pdf',
+        size: 100,
+      } as Express.Multer.File;
+
+      await expect(service.uploadAvatar('user-1', mockFile)).rejects.toThrow(BadRequestException);
     });
   });
 });

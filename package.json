@@ -4,8 +4,7 @@
   "description": "AI-Native Chat System Monorepo",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "libs/*"
+    "apps/*"
   ],
   "scripts": {
     "dev": "concurrently -k \"pnpm --filter ai-native-chat-api start:dev\" \"pnpm --filter ai-native-chat-web dev\"",

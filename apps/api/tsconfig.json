@@ -19,19 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@prisma/client": ["./node_modules/.prisma/client"],
-      "@prisma/client/*": ["./node_modules/.prisma/client/*"],
-      "@app/shared": ["libs/shared/src"],
-      "@app/shared/*": ["libs/shared/src/*"],
-      "@app/config": ["libs/config/src"],
-      "@app/config/*": ["libs/config/src/*"],
-      "@app/types": ["libs/types/src"],
-      "@app/types/*": ["libs/types/src/*"],
-      "@app/llm": ["libs/llm/src"],
-      "@app/llm/*": ["libs/llm/src/*"],
-      "@app/vector": ["libs/vector/src"],
-      "@app/vector/*": ["libs/vector/src/*"],
-      "@app/redis": ["libs/redis/src"],
-      "@app/redis/*": ["libs/redis/src/*"]
+      "@prisma/client/*": ["./node_modules/.prisma/client/*"]
     }
   }
 }

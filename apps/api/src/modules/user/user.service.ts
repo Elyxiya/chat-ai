@@ -1,10 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
+import { MinioService } from '../storage/minio.service';
 import { UpdateProfileDto } from './dto/user.dto';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly minio: MinioService,
+  ) {}
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -48,11 +52,23 @@ export class UserService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('Only image files are allowed');
+    }
+
+    const ext = file.originalname.split('.').pop() || 'png';
+    const objectName = `avatars/${userId}/${Date.now()}.${ext}`;
+
+    const result = await this.minio.uploadFile(file.buffer, objectName, file.mimetype);
+
     await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl },
+      data: { avatarUrl: result.url },
     });
-    return { avatarUrl };
+
+    return { avatarUrl: result.url };
   }
 }
