@@ -15,6 +15,7 @@ export default function ChatLayout() {
   const { resolvedTheme, setTheme } = useThemeStore();
   const { unreadCount, setOpen, fetchUnreadCount } = useNotificationStore();
   const [showSearch, setShowSearch] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (accessToken) {

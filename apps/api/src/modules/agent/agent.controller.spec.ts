@@ -125,6 +125,97 @@ describe('AgentController', () => {
     });
   });
 
+  describe('chatStreamEnhanced', () => {
+    it('AGENT-CTRL-11: should set SSE headers for enhanced stream', async () => {
+      mockOrchestrator.streamProcessWithEvents.mockImplementation(async function* () {
+        yield { type: 'chunk', content: 'Hello' };
+      });
+
+      await controller.chatStreamEnhanced(
+        'user-1',
+        { message: 'Hello', mode: 'reasoner' },
+        mockResponse as Response,
+      );
+
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
+    });
+
+    it('AGENT-CTRL-12: should send start event for enhanced stream', async () => {
+      mockOrchestrator.streamProcessWithEvents.mockImplementation(async function* () {
+        yield { type: 'chunk', content: 'Hello' };
+      });
+
+      await controller.chatStreamEnhanced(
+        'user-1',
+        { message: 'Hi', sessionId: 'session-1' },
+        mockResponse as Response,
+      );
+
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"start"'));
+    });
+
+    it('AGENT-CTRL-13: should stream events', async () => {
+      mockOrchestrator.streamProcessWithEvents.mockImplementation(async function* () {
+        yield { type: 'thinking', content: 'Thinking...' };
+        yield { type: 'chunk', content: 'Response' };
+      });
+
+      await controller.chatStreamEnhanced(
+        'user-1',
+        { message: 'Hello' },
+        mockResponse as Response,
+      );
+
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"thinking"'));
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"chunk"'));
+    });
+
+    it('AGENT-CTRL-14: should send done event at end of enhanced stream', async () => {
+      mockOrchestrator.streamProcessWithEvents.mockImplementation(async function* () {
+        yield { type: 'chunk', content: 'Done' };
+      });
+
+      await controller.chatStreamEnhanced(
+        'user-1',
+        { message: 'Done' },
+        mockResponse as Response,
+      );
+
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"done"'));
+      expect(mockResponse.end).toHaveBeenCalled();
+    });
+
+    it('AGENT-CTRL-15: should handle error in enhanced stream', async () => {
+      mockOrchestrator.streamProcessWithEvents.mockImplementation(async function* () {
+        throw new Error('Stream error');
+      });
+
+      await controller.chatStreamEnhanced(
+        'user-1',
+        { message: 'Fail' },
+        mockResponse as Response,
+      );
+
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"error"'));
+      expect(mockResponse.end).toHaveBeenCalled();
+    });
+  });
+
+  describe('chatStream - error handling', () => {
+    it('AGENT-CTRL-16: should handle errors in stream', async () => {
+      mockOrchestrator.streamProcess.mockImplementation(async function* () {
+        throw new Error('Unexpected error');
+      });
+
+      await controller.chatStream('user-1', { message: 'Error' }, mockResponse as Response);
+
+      expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"error"'));
+      expect(mockResponse.end).toHaveBeenCalled();
+    });
+  });
+
   describe('getHistory', () => {
     it('AGENT-CTRL-07: should return conversation history', async () => {
       const history = [

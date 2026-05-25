@@ -5,7 +5,7 @@ import { useThemeStore } from './stores/theme.store';
 import LoginPage from './pages/LoginPage';
 import ChatLayout from './pages/ChatLayout';
 import PrivateChatPage from './pages/PrivateChatPage';
-import AgentChatPage from './pages/AgentChatPage';
+import EnhancedAgentPage from './pages/EnhancedAgentPage';
 import SettingsPage from './pages/SettingsPage';
 import KnowledgePage from './pages/KnowledgePage';
 import GroupManagementPage from './pages/GroupManagementPage';
@@ -47,8 +47,8 @@ export default function App() {
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="chat" element={<PrivateChatPage />} />
         <Route path="chat/:sessionId" element={<PrivateChatPage />} />
-        <Route path="agent" element={<AgentChatPage />} />
-        <Route path="agent/:sessionId" element={<AgentChatPage />} />
+        <Route path="agent" element={<EnhancedAgentPage />} />
+        <Route path="agent/:sessionId" element={<EnhancedAgentPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
         <Route path="group/:sessionId" element={<GroupManagementPage />} />

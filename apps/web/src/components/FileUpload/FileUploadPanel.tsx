@@ -41,6 +41,7 @@ export default function FileUploadPanel({ onUpload, disabled }: FileUploadPanelP
         multiple
         accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
         className="hidden"
+        data-testid="file-input"
         onChange={(e) => handleFiles(e.target.files)}
         disabled={disabled}
       />

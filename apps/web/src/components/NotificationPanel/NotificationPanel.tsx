@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '@/stores/notification.store';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -19,6 +20,7 @@ const NOTIFICATION_COLORS: Record<string, string> = {
 };
 
 export default function NotificationPanel() {
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -30,6 +32,18 @@ export default function NotificationPanel() {
     markAllAsRead,
     deleteNotification,
   } = useNotificationStore();
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.isRead) markAsRead(notification.id);
+    setOpen(false);
+
+    const data = notification.data || {};
+    if (data.sessionId) {
+      navigate(`/chat/${data.sessionId}`);
+    } else if (notification.type === 'friend_request' && data.requesterId) {
+      navigate(`/chat`);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -91,9 +105,7 @@ export default function NotificationPanel() {
                   className={`p-3 hover:bg-bg transition-colors cursor-pointer ${
                     !notification.isRead ? NOTIFICATION_COLORS[notification.type] || '' : ''
                   }`}
-                  onClick={() => {
-                    if (!notification.isRead) markAsRead(notification.id);
-                  }}
+                  onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-lg flex-shrink-0 mt-0.5">

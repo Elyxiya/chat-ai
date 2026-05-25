@@ -449,6 +449,30 @@ export class ChatService {
     return users;
   }
 
+  async searchMessages(userId: string, sessionId: string, query: string) {
+    if (!query || query.length < 1) return [];
+
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+
+    if (!member) throw new ForbiddenException('Not a member of this session');
+
+    return this.prisma.message.findMany({
+      where: {
+        sessionId,
+        isRecalled: false,
+        contentType: 'text',
+        content: { contains: query, mode: 'insensitive' },
+      },
+      include: {
+        sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
   private async getUnreadCount(userId: string, sessionId: string, lastReadAt: Date | null): Promise<number> {
     const where: any = {
       sessionId,

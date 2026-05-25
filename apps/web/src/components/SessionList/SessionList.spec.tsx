@@ -113,7 +113,7 @@ describe('SessionList', () => {
     vi.clearAllMocks();
     mockNavigate.mockReset();
 
-    (useChatStore as any).mockReturnValue({ sessions: [] });
+    (useChatStore as any).mockReturnValue({ sessions: [], onlineUsers: new Set() });
     (useAuthStore as any).mockReturnValue({ user: mockUser });
   });
 
@@ -129,7 +129,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-02: should render session list', () => {
-    (useChatStore as any).mockReturnValue({ sessions: mockSessions });
+    (useChatStore as any).mockReturnValue({ sessions: mockSessions, onlineUsers: new Set() });
 
     render(
       <MemoryRouter>
@@ -143,7 +143,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-03: should show unread badge', () => {
-    (useChatStore as any).mockReturnValue({ sessions: mockSessions });
+    (useChatStore as any).mockReturnValue({ sessions: mockSessions, onlineUsers: new Set() });
 
     render(
       <MemoryRouter>
@@ -155,7 +155,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-04: should display last message preview', () => {
-    (useChatStore as any).mockReturnValue({ sessions: mockSessions });
+    (useChatStore as any).mockReturnValue({ sessions: mockSessions, onlineUsers: new Set() });
 
     render(
       <MemoryRouter>
@@ -167,7 +167,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-05: should navigate on session click', () => {
-    (useChatStore as any).mockReturnValue({ sessions: mockSessions });
+    (useChatStore as any).mockReturnValue({ sessions: mockSessions, onlineUsers: new Set() });
     // Mock window.location.pathname
     Object.defineProperty(window, 'location', {
       value: { pathname: '/' },
@@ -187,7 +187,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-06: should navigate to agent chat for agent sessions', () => {
-    (useChatStore as any).mockReturnValue({ sessions: [mockSessions[2]] });
+    (useChatStore as any).mockReturnValue({ sessions: [mockSessions[2]], onlineUsers: new Set() });
 
     render(
       <MemoryRouter>
@@ -201,7 +201,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-07: should navigate to new chat on + button click', () => {
-    (useChatStore as any).mockReturnValue({ sessions: [] });
+    (useChatStore as any).mockReturnValue({ sessions: [], onlineUsers: new Set() });
 
     render(
       <MemoryRouter>
@@ -216,7 +216,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-08: should highlight active session', () => {
-    (useChatStore as any).mockReturnValue({ sessions: mockSessions });
+    (useChatStore as any).mockReturnValue({ sessions: mockSessions, onlineUsers: new Set() });
 
     // Simulate being on /chat/sess-1
     Object.defineProperty(window, 'location', {
@@ -235,7 +235,7 @@ describe('SessionList', () => {
   });
 
   it('SESS-WEB-09: should show AI Agent with robot icon', () => {
-    (useChatStore as any).mockReturnValue({ sessions: [mockSessions[2]] });
+    (useChatStore as any).mockReturnValue({ sessions: [mockSessions[2]], onlineUsers: new Set() });
 
     const { container } = render(
       <MemoryRouter>

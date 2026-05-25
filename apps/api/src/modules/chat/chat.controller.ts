@@ -89,6 +89,16 @@ export class ChatController {
     );
   }
 
+  @Get('sessions/:sessionId/search')
+  @ApiOperation({ summary: 'Search messages within a session' })
+  async searchMessages(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+    @Query('q') query: string,
+  ) {
+    return success(await this.chatService.searchMessages(userId, sessionId, query));
+  }
+
   @Post('sessions/:sessionId/messages')
   @ApiOperation({ summary: 'Send a message' })
   async sendMessage(

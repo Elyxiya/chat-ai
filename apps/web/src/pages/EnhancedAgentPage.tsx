@@ -15,7 +15,7 @@ export default function EnhancedAgentPage() {
   } = useAgentStore();
 
   const [input, setInput] = useState('');
-  const [mode, setMode] = useState<'react' | 'plan'>('react');
+  const [mode, setMode] = useState<'react' | 'planner' | 'reasoner'>('react');
   const [showThinking, setShowThinking] = useState(true);
   const [showTools, setShowTools] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -32,7 +32,7 @@ export default function EnhancedAgentPage() {
     if (!input.trim() || isStreaming) return;
     const content = input.trim();
     setInput('');
-    await streamMessage(content, mode === 'plan' ? 'planner' : 'react');
+    await streamMessage(content, mode);
   }, [input, isStreaming, mode, streamMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -64,11 +64,12 @@ export default function EnhancedAgentPage() {
             {/* Mode selector */}
             <select
               value={mode}
-              onChange={(e) => setMode(e.target.value as 'react' | 'plan')}
+              onChange={(e) => setMode(e.target.value as 'react' | 'planner' | 'reasoner')}
               className="text-sm bg-bg border border-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
-              <option value="react">ReAct Mode</option>
-              <option value="plan">Plan & Execute</option>
+              <option value="react">ReAct</option>
+              <option value="planner">规划</option>
+              <option value="reasoner">推理</option>
             </select>
 
             <button
@@ -137,7 +138,7 @@ export default function EnhancedAgentPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Ask the AI agent anything (${mode === 'react' ? 'ReAct' : 'Plan mode'})...`}
+              placeholder={`Ask the AI agent anything (${mode === 'react' ? 'ReAct' : mode === 'reasoner' ? 'DeepSeek-R1' : 'Plan mode'})...`}
               className="input-field flex-1 resize-none min-h-[44px] max-h-32"
               rows={1}
               disabled={isStreaming}

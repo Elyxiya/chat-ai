@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import MarkdownIt from 'markdown-it';
 import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
+import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
 
 const md = new MarkdownIt({
   html: false,
@@ -27,6 +28,7 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message, isOwn, onReaction, onReply }: MessageBubbleProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,23 +55,23 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
 
     if (message.contentType === 'image') {
       return (
-        <img
-          src={message.content}
-          alt="Shared image"
-          className="max-w-[300px] max-h-[300px] rounded-lg"
-          loading="lazy"
-        />
+        <button onClick={() => setPreviewSrc(message.content)} className="text-left">
+          <img
+            src={message.content}
+            alt="Shared image"
+            className="max-w-[300px] max-h-[300px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+            loading="lazy"
+          />
+        </button>
       );
     }
 
     if (message.contentType === 'file') {
       const fileName = message.metadata?.fileName || 'Download file';
       return (
-        <a
-          href={message.content}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 bg-bg rounded-lg border border-border hover:bg-border transition-colors text-sm"
+        <button
+          onClick={() => setPreviewSrc(message.content)}
+          className="flex items-center gap-3 px-3 py-2 bg-bg rounded-lg border border-border hover:bg-border transition-colors text-sm w-full text-left"
         >
           <svg className="w-6 h-6 text-text-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -80,7 +82,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
               <p className="text-xs text-text-secondary">{formatFileSize(message.metadata.fileSize)}</p>
             )}
           </div>
-        </a>
+        </button>
       );
     }
 
@@ -199,6 +201,16 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
           </div>
         )}
       </div>
+
+      {previewSrc && (
+        <FilePreviewModal
+          src={previewSrc}
+          fileName={message.metadata?.fileName || 'Preview'}
+          mimeType={message.metadata?.mimeType}
+          fileSize={message.metadata?.fileSize}
+          onClose={() => setPreviewSrc(null)}
+        />
+      )}
     </div>
   );
 }
