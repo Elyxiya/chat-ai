@@ -120,6 +120,13 @@ export const userApi = {
   getProfile: (userId: string) => apiClient.get(`/users/${userId}`),
   updateProfile: (data: { nickname?: string; bio?: string; avatarUrl?: string }) =>
     apiClient.patch('/users/profile', data),
+  uploadAvatar: (file: File) => {
+    const form = new FormData();
+    form.append('avatar', file);
+    return apiClient.post('/users/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 export const knowledgeApi = {
@@ -130,6 +137,34 @@ export const knowledgeApi = {
   deleteBase: (kbId: string) => apiClient.delete(`/knowledge/bases/${kbId}`),
   addText: (kbId: string, content: string, metadata?: Record<string, any>) =>
     apiClient.post(`/knowledge/bases/${kbId}/text`, { content, metadata }),
+  uploadDocument: (kbId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post(`/knowledge/bases/${kbId}/documents`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
   search: (query: string, topK?: number) =>
     apiClient.get('/knowledge/search', { params: { query, topK } }),
+};
+
+export const uploadApi = {
+  uploadFile: (file: File, description?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (description) form.append('description', description);
+    return apiClient.post('/upload/file', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  uploadImage: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post('/upload/image', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  listFiles: (page?: number, pageSize?: number) =>
+    apiClient.get('/upload/files', { params: { page, pageSize } }),
+  deleteFile: (id: string) => apiClient.delete(`/upload/files/${id}`),
 };

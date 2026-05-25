@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -26,7 +26,6 @@ on:
 
 env:
   NODE_VERSION: '20'
-  REGISTRY: ghcr.io
 
 jobs:
   lint-and-test-api:
@@ -124,87 +123,72 @@ jobs:
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:3000' }}
 
-  docker-build-push:
-    runs-on: ubuntu-latest
-    needs: [lint-and-test-api, lint-and-test-web]
-    if: github.ref == 'refs/heads/main'
+  # 以下为 CD 部分，部署环境就绪后取消注释即可使用
+  # docker-build-push:
+  #   runs-on: ubuntu-latest
+  #   needs: [lint-and-test-api, lint-and-test-web]
+  #   if: github.ref == 'refs/heads/main'
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - name: Log in to GHCR
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Extract metadata (API)
+  #       id: meta-api
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ghcr.io/${{ github.repository }}/api
+  #         tags: type=sha,prefix=
+  #     - name: Build and push API
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: apps/api
+  #         push: true
+  #         tags: ${{ steps.meta-api.outputs.tags }}
+  #         labels: ${{ steps.meta-api.outputs.labels }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+  #         build-args: |
+  #           DATABASE_URL=postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
+  #           JWT_SECRET=${{ secrets.JWT_SECRET }}
+  #     - name: Extract metadata (Web)
+  #       id: meta-web
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ghcr.io/${{ github.repository }}/web
+  #         tags: type=sha,prefix=
+  #     - name: Build and push Web
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: apps/web
+  #         push: true
+  #         tags: ${{ steps.meta-web.outputs.tags }}
+  #         labels: ${{ steps.meta-web.outputs.labels }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
 
-    permissions:
-      contents: read
-      packages: write
+  # deploy-staging:
+  #   runs-on: ubuntu-latest
+  #   needs: docker-build-push
+  #   if: github.ref == 'refs/heads/main'
+  #   environment: staging
+  #   steps:
+  #     - name: Deploy to Staging
+  #       run: echo "Deploying to staging..."
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (API)
-        id: meta-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/api
-          tags: type=sha,prefix=
-
-      - name: Build and push API
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/api
-          push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            DATABASE_URL=postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-
-      - name: Extract metadata (Web)
-        id: meta-web
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/web
-          tags: type=sha,prefix=
-
-      - name: Build and push Web
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/web
-          push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy-staging:
-    runs-on: ubuntu-latest
-    needs: docker-build-push
-    if: github.ref == 'refs/heads/main'
-    environment: staging
-
-    steps:
-      - name: Deploy to Staging
-        run: |
-          echo "Deploying to staging..."
-          # Add your deployment script here
-          # e.g., kubectl apply -f k8s/staging/
-
-  deploy-production:
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.event_name == 'release'
-    environment: production
-
-    steps:
-      - name: Deploy to Production
-        run: |
-          echo "Deploying to production..."
-          # Add your production deployment script here
-          # e.g., kubectl apply -f k8s/production/
+  # deploy-production:
+  #   runs-on: ubuntu-latest
+  #   needs: deploy-staging
+  #   if: github.event_name == 'release'
+  #   environment: production
+  #   steps:
+  #     - name: Deploy to Production
+  #       run: echo "Deploying to production..."

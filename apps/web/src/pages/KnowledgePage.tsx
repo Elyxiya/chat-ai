@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useKnowledgeStore } from '@/stores/knowledge.store';
+import { knowledgeApi } from '@/api/client';
 
 export default function KnowledgePage() {
   const { bases, currentBase, searchQuery, searchResults, isSearching, fetchBases, createBase, deleteBase, addText, search, setCurrentBase, setSearchQuery } = useKnowledgeStore();
@@ -8,6 +9,8 @@ export default function KnowledgePage() {
   const [newBaseDesc, setNewBaseDesc] = useState('');
   const [addTextContent, setAddTextContent] = useState('');
   const [activeTab, setActiveTab] = useState<'bases' | 'search'>('bases');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchBases(); }, [fetchBases]);
 
@@ -17,6 +20,21 @@ export default function KnowledgePage() {
     setNewBaseName('');
     setNewBaseDesc('');
     setShowCreate(false);
+  };
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentBase) return;
+    setUploading(true);
+    try {
+      await knowledgeApi.uploadDocument(currentBase.id, file);
+      await fetchBases();
+    } catch (err) {
+      console.error('Document upload failed:', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -124,6 +142,24 @@ export default function KnowledgePage() {
             </div>
             <div className="flex-1 p-4 space-y-4 overflow-y-auto">
               <div>
+                <h3 className="text-sm font-medium mb-2">Upload Document</h3>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt,.md"
+                  onChange={handleDocumentUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="btn-secondary w-full disabled:opacity-50"
+                >
+                  {uploading ? 'Uploading...' : 'Upload Document'}
+                </button>
+              </div>
+
+              <div className="border-t border-border pt-4">
                 <h3 className="text-sm font-medium mb-2">Add Text Content</h3>
                 <textarea
                   value={addTextContent}

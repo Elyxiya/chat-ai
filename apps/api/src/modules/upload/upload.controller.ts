@@ -18,7 +18,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { UploadService } from './upload.service';
 import { UploadFileDto } from './dto/upload.dto';
 
-@Controller('api/v1/upload')
+@Controller({ path: 'upload', version: '1' })
 @UseGuards(AuthGuard('jwt'))
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}

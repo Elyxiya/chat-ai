@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import MessageBubble from '@/components/MessageBubble/MessageBubble';
+import FileUploadPanel from '@/components/FileUpload/FileUploadPanel';
+import { uploadApi } from '@/api/client';
 
 export default function PrivateChatPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -15,6 +17,7 @@ export default function PrivateChatPage() {
     setActiveSession,
     loadMessages,
     sendMessage,
+    sendFileMessage,
     sendTyping,
   } = useChatStore();
 
@@ -58,6 +61,20 @@ export default function PrivateChatPage() {
       handleSend();
     }
   };
+
+  const handleFileUpload = useCallback(async (files: File[]) => {
+    if (!sessionId) return;
+    for (const file of files) {
+      try {
+        const isImage = file.type.startsWith('image/');
+        const res: any = await (isImage ? uploadApi.uploadImage(file) : uploadApi.uploadFile(file));
+        const url = res.data?.url || res.url;
+        sendFileMessage(sessionId, url, isImage ? 'image' : 'file', file.name, file.size);
+      } catch (err) {
+        console.error('Upload failed:', err);
+      }
+    }
+  }, [sessionId, sendFileMessage]);
 
   const typingUsersList = sessionId ? typingUsers[sessionId] || [] : [];
   const otherMembers = session?.members.filter((m) => m.user.id !== user?.id) || [];
@@ -121,6 +138,7 @@ export default function PrivateChatPage() {
       {/* Input */}
       <div className="p-4 border-t border-border bg-surface">
         <div className="flex items-end gap-2">
+          <FileUploadPanel onUpload={handleFileUpload} />
           <textarea
             className="input-field resize-none max-h-32"
             rows={1}

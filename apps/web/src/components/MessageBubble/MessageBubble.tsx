@@ -11,6 +11,12 @@ const md = new MarkdownIt({
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isOwn: boolean;
@@ -53,6 +59,44 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
           className="max-w-[300px] max-h-[300px] rounded-lg"
           loading="lazy"
         />
+      );
+    }
+
+    if (message.contentType === 'file') {
+      const fileName = message.metadata?.fileName || 'Download file';
+      return (
+        <a
+          href={message.content}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2 bg-bg rounded-lg border border-border hover:bg-border transition-colors text-sm"
+        >
+          <svg className="w-6 h-6 text-text-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{fileName}</p>
+            {message.metadata?.fileSize && (
+              <p className="text-xs text-text-secondary">{formatFileSize(message.metadata.fileSize)}</p>
+            )}
+          </div>
+        </a>
+      );
+    }
+
+    if (message.contentType === 'audio') {
+      return (
+        <audio controls className="max-w-[280px] h-10" preload="metadata">
+          <source src={message.content} />
+        </audio>
+      );
+    }
+
+    if (message.contentType === 'video') {
+      return (
+        <video controls className="max-w-[300px] max-h-[300px] rounded-lg" preload="metadata">
+          <source src={message.content} />
+        </video>
       );
     }
 

@@ -20,6 +20,7 @@ interface ChatState {
   setActiveSession: (sessionId: string | null) => void;
   loadMessages: (sessionId: string, params?: { limit?: number; before?: string }) => Promise<void>;
   sendMessage: (sessionId: string, content: string, contentType?: string) => void;
+  sendFileMessage: (sessionId: string, url: string, fileType: string, fileName?: string, fileSize?: number) => void;
   sendTyping: (sessionId: string, isTyping: boolean) => void;
   recallMessage: (messageId: string) => Promise<void>;
   markRead: (sessionId: string) => void;
@@ -160,6 +161,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     socket.emit('message', {
       type: WsMessageType.TEXT,
       data: { sessionId, content, contentType },
+      timestamp: Date.now(),
+    });
+  },
+
+  sendFileMessage: (sessionId, url, fileType, fileName, fileSize) => {
+    const { socket } = get();
+    if (!socket) return;
+    const wsType = fileType === 'image' ? WsMessageType.IMAGE : WsMessageType.FILE;
+    socket.emit('message', {
+      type: wsType,
+      data: { sessionId, content: url, contentType: fileType, fileName, fileSize },
       timestamp: Date.now(),
     });
   },

@@ -13,7 +13,6 @@ export class MinioService implements OnModuleInit {
   private readonly logger = new Logger(MinioService.name);
   private client: Minio.Client;
   private readonly bucket: string;
-  private readonly publicUrl: string;
 
   constructor(private readonly config: ConfigService) {
     const endPoint = this.config.get('MINIO_ENDPOINT', 'localhost');
@@ -30,10 +29,6 @@ export class MinioService implements OnModuleInit {
       accessKey,
       secretKey,
     });
-
-    const protocol = useSSL ? 'https' : 'http';
-    const consolePort = Number(this.config.get('MINIO_CONSOLE', '9001'));
-    this.publicUrl = `${protocol}://${endPoint}:${consolePort}/api/v1/buckets/${this.bucket}/objects/download`;
   }
 
   async onModuleInit() {
@@ -57,8 +52,20 @@ export class MinioService implements OnModuleInit {
       'Content-Type': mimeType || 'application/octet-stream',
     });
 
-    const url = `${this.publicUrl}/${objectName}`;
+    // Use API proxy URL — browser resolves against current origin
+    const url = `/api/v1/upload/file/download?path=${encodeURIComponent(objectName)}`;
     return { url, objectName, bucket: this.bucket };
+  }
+
+  async getFileStream(objectName: string): Promise<{ stream: NodeJS.ReadableStream; mimeType?: string }> {
+    try {
+      const stream = await this.client.getObject(this.bucket, objectName);
+      const stat = await this.client.statObject(this.bucket, objectName);
+      return { stream, mimeType: stat.metaData?.['content-type'] as string | undefined };
+    } catch (error: any) {
+      this.logger.warn(`File not found in MinIO: ${objectName} — ${error.message}`);
+      throw error;
+    }
   }
 
   async deleteFile(objectName: string): Promise<void> {
