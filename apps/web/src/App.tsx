@@ -9,6 +9,7 @@ import EnhancedAgentPage from './pages/EnhancedAgentPage';
 import SettingsPage from './pages/SettingsPage';
 import KnowledgePage from './pages/KnowledgePage';
 import GroupManagementPage from './pages/GroupManagementPage';
+import AdminPage from './pages/AdminPage';
 import { ToastProvider } from './components/Toast/ToastContainer';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
         <Route path="group/:sessionId" element={<GroupManagementPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Route>
     </Routes>
     </ToastProvider>

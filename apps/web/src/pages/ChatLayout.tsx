@@ -42,10 +42,28 @@ export default function ChatLayout() {
   return (
     <>
     <div className="flex h-screen bg-bg">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border flex flex-col bg-surface">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — hidden on mobile unless toggled */}
+      <aside className={`
+        w-64 border-r border-border flex flex-col bg-surface
+        md:relative md:translate-x-0
+        fixed inset-y-0 left-0 z-40 transition-transform duration-200
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
         {/* User info */}
         <div className="p-4 border-b border-border flex items-center gap-3">
+          <button onClick={() => setSidebarOpen(false)} className="p-1 mr-1 md:hidden hover:bg-border rounded">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
           <img
             src={user?.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.username}`}
             alt={user?.username}
@@ -106,6 +124,7 @@ export default function ChatLayout() {
             }
             label="Chats"
             path="/chat"
+            onNavigate={() => setSidebarOpen(false)}
           />
           <NavItem
             icon={
@@ -116,6 +135,7 @@ export default function ChatLayout() {
             label="AI Agent"
             path="/agent"
             badge="AI"
+            onNavigate={() => setSidebarOpen(false)}
           />
           <NavItem
             icon={
@@ -125,13 +145,27 @@ export default function ChatLayout() {
             }
             label="Knowledge Base"
             path="/knowledge"
+            onNavigate={() => setSidebarOpen(false)}
           />
+          {user?.role === 'admin' && (
+            <NavItem
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              }
+              label="Admin"
+              path="/admin"
+              onNavigate={() => setSidebarOpen(false)}
+            />
+          )}
         </nav>
 
         {/* Search / Add friends */}
         <div className="p-2 border-t border-border">
           <button
-            onClick={() => setShowSearch(true)}
+            onClick={() => { setShowSearch(true); setSidebarOpen(false); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-border rounded-lg transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,6 +183,21 @@ export default function ChatLayout() {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header with hamburger */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border bg-surface">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 hover:bg-border rounded-lg transition-colors"
+            title="Open menu"
+          >
+            <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-text-secondary truncate">
+            {user?.nickname || user?.username || 'Chat'}
+          </span>
+        </div>
         <Outlet />
       </main>
     </div>
@@ -158,13 +207,13 @@ export default function ChatLayout() {
   );
 }
 
-function NavItem({ icon, label, path, badge }: { icon: React.ReactNode; label: string; path: string; badge?: string }) {
+function NavItem({ icon, label, path, badge, onNavigate }: { icon: React.ReactNode; label: string; path: string; badge?: string; onNavigate?: () => void }) {
   const navigate = useNavigate();
   const current = window.location.pathname.startsWith(path);
 
   return (
     <button
-      onClick={() => navigate(path)}
+      onClick={() => { navigate(path); onNavigate?.(); }}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
         current
           ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'

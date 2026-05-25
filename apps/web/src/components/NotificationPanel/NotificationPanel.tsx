@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useNotificationStore } from '@/stores/notification.store';
+import { useNotificationStore, Notification as AppNotification } from '@/stores/notification.store';
 import { formatDistanceToNow } from 'date-fns';
 
 const NOTIFICATION_ICONS: Record<string, string> = {
@@ -33,7 +33,7 @@ export default function NotificationPanel() {
     deleteNotification,
   } = useNotificationStore();
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: AppNotification) => {
     if (!notification.isRead) markAsRead(notification.id);
     setOpen(false);
 

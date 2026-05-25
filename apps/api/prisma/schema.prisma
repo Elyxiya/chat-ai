@@ -19,6 +19,7 @@ model User {
   nickname      String?   @db.VarChar(100)
   avatarUrl     String?   @map("avatar_url") @db.Text
   bio           String?   @db.Text
+  role          String    @default("user") @db.VarChar(20)
   userType      String    @default("human") @map("user_type") @db.VarChar(20)
   status        String    @default("offline") @db.VarChar(20)
   lastSeenAt    DateTime? @map("last_seen_at")

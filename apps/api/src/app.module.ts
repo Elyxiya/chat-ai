@@ -15,6 +15,7 @@ import { RedisModule } from './modules/common/redis.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
 
 const ENV_PATH = path.join(__dirname, '..', '..', '..', '.env');
@@ -44,6 +45,7 @@ const ENV_PATH = path.join(__dirname, '..', '..', '..', '.env');
     UploadModule,
     NotificationModule,
     StorageModule,
+    AdminModule,
   ],
   providers: [
     {

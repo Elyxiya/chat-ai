@@ -5,6 +5,7 @@ export interface User {
   nickname?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
+  role?: string;
   userType: 'human' | 'bot' | 'agent';
   status: 'online' | 'offline' | 'away' | 'busy';
   lastSeenAt?: string;

@@ -168,3 +168,20 @@ export const uploadApi = {
     apiClient.get('/upload/files', { params: { page, pageSize } }),
   deleteFile: (id: string) => apiClient.delete(`/upload/files/${id}`),
 };
+
+export const adminApi = {
+  listUsers: (params?: { page?: number; limit?: number; search?: string; status?: string; role?: string }) =>
+    apiClient.get('/admin/users', { params }),
+  updateUserStatus: (userId: string, status: string) =>
+    apiClient.patch(`/admin/users/${userId}/status`, { status }),
+  updateUserRole: (userId: string, role: string) =>
+    apiClient.patch(`/admin/users/${userId}/role`, { role }),
+  deleteUser: (userId: string) =>
+    apiClient.delete(`/admin/users/${userId}`),
+  listAuditLogs: (params?: { page?: number; limit?: number; action?: string }) =>
+    apiClient.get('/admin/audit-logs', { params }),
+  getSettings: () => apiClient.get('/admin/settings'),
+  updateSetting: (key: string, value: any, description?: string) =>
+    apiClient.patch('/admin/settings', { key, value, description }),
+  getStats: () => apiClient.get('/admin/stats'),
+};

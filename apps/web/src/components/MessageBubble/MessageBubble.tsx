@@ -111,7 +111,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
 
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative`}>
-      <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
+      <div className={`max-w-[85%] md:max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
         {!isOwn && message.sender && (
           <div className="flex items-center gap-2 mb-1 px-1">
             <img
