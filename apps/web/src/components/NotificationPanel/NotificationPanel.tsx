@@ -102,7 +102,7 @@ export default function NotificationPanel() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-3 hover:bg-bg transition-colors cursor-pointer ${
+                  className={`p-3 group hover:bg-bg transition-colors cursor-pointer ${
                     !notification.isRead ? NOTIFICATION_COLORS[notification.type] || '' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}

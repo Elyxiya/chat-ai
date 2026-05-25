@@ -42,5 +42,8 @@
   "devDependencies": {
     "concurrently": "^9.1.0",
     "wait-on": "^8.0.5"
+  },
+  "dependencies": {
+    "react-window": "1.8.10"
   }
 }

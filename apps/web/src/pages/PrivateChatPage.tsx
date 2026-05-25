@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import MessageBubble from '@/components/MessageBubble/MessageBubble';
+import VirtualizedMessageList from '@/components/VirtualizedMessageList/VirtualizedMessageList';
 import FileUploadPanel from '@/components/FileUpload/FileUploadPanel';
 import { uploadApi } from '@/api/client';
 
@@ -22,7 +23,6 @@ export default function PrivateChatPage() {
   } = useChatStore();
 
   const [input, setInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const session = sessions.find((s) => s.id === sessionId);
   const sessionMessages = useMemo(() => messages[sessionId || ''] || [], [messages, sessionId]);
@@ -33,10 +33,6 @@ export default function PrivateChatPage() {
       loadMessages(sessionId);
     }
   }, [sessionId, activeSessionId, setActiveSession, loadMessages]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sessionMessages]);
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
@@ -113,27 +109,23 @@ export default function PrivateChatPage() {
         </div>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
-        {sessionMessages.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isOwn={msg.senderId === user?.id}
-          />
-        ))}
-        {typingUsersList.length > 0 && (
-          <div className="flex items-center gap-2 text-text-secondary text-sm px-4">
-            <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="w-2 h-2 bg-text-secondary rounded-full animate-typing-dot" style={{ animationDelay: `${i * 0.2}s` }} />
-              ))}
+      {/* Messages — virtualized */}
+      <VirtualizedMessageList
+        messages={sessionMessages}
+        userId={user?.id}
+        typingIndicator={
+          typingUsersList.length > 0 ? (
+            <div className="flex items-center gap-2 text-text-secondary text-sm">
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="w-2 h-2 bg-text-secondary rounded-full animate-typing-dot" style={{ animationDelay: `${i * 0.2}s` }} />
+                ))}
+              </div>
+              <span>{typingUsersList.map((u) => u.username).join(', ')} typing...</span>
             </div>
-            <span>{typingUsersList.map((u) => u.username).join(', ')} typing...</span>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Input */}
       <div className="p-4 border-t border-border bg-surface">

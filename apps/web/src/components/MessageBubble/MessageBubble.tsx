@@ -3,6 +3,7 @@ import MarkdownIt from 'markdown-it';
 import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
 import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
+import LazyImage from '../LazyImage/LazyImage';
 
 const md = new MarkdownIt({
   html: false,
@@ -56,11 +57,10 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
     if (message.contentType === 'image') {
       return (
         <button onClick={() => setPreviewSrc(message.content)} className="text-left">
-          <img
+          <LazyImage
             src={message.content}
             alt="Shared image"
             className="max-w-[300px] max-h-[300px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-            loading="lazy"
           />
         </button>
       );
@@ -114,7 +114,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
       <div className={`max-w-[85%] md:max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
         {!isOwn && message.sender && (
           <div className="flex items-center gap-2 mb-1 px-1">
-            <img
+            <LazyImage
               src={message.sender.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${message.sender.username}`}
               alt={message.sender.username}
               className="w-6 h-6 rounded-full"
