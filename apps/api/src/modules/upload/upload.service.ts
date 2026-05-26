@@ -116,6 +116,38 @@ export class UploadService {
     };
   }
 
+  async getFileInfo(userId: string, fileId: string) {
+    const file = await this.prisma.fileUpload.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new BadRequestException('File not found');
+    }
+
+    return {
+      id: file.id,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      mimeType: file.mimeType,
+      url: file.storageUrl,
+      createdAt: file.createdAt,
+    };
+  }
+
+  async downloadFile(userId: string, fileId: string) {
+    const file = await this.prisma.fileUpload.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new BadRequestException('File not found');
+    }
+
+    const { stream, mimeType } = await this.minio.getFileStream(file.storagePath);
+    return { stream, fileName: file.fileName, mimeType };
+  }
+
   async deleteFile(userId: string, fileId: string) {
     const file = await this.prisma.fileUpload.findUnique({
       where: { id: fileId },

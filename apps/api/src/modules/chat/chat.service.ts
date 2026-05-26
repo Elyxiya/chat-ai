@@ -67,6 +67,7 @@ export class ChatService {
       myRole: m.role,
       myNickname: m.nickname,
       lastReadAt: m.lastReadAt,
+      pinnedAt: m.pinnedAt,
       lastMessage: lastMessageBySession.get(m.sessionId) || null,
       unreadCount: lastMessageBySession.has(m.sessionId) && m.lastReadAt
         ? recentMessages.filter(
@@ -77,6 +78,16 @@ export class ChatService {
           ).length
         : 0,
     }));
+
+    // Sort: pinned first, then by lastMessage time
+    sessions.sort((a: any, b: any) => {
+      if (a.pinnedAt && !b.pinnedAt) return -1;
+      if (!a.pinnedAt && b.pinnedAt) return 1;
+      if (a.pinnedAt && b.pinnedAt) return new Date(b.pinnedAt).getTime() - new Date(a.pinnedAt).getTime();
+      const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : new Date(a.createdAt).getTime();
+      const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : new Date(b.createdAt).getTime();
+      return bTime - aTime;
+    });
 
     return sessions;
   }
@@ -241,6 +252,55 @@ export class ChatService {
     }
 
     return message as unknown as MessageWithSender;
+  }
+
+  async forwardMessage(userId: string, messageId: string, targetSessionIds: string[]) {
+    const original = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!original) throw new NotFoundException('Message not found');
+
+    const memberSessions = await this.prisma.chatSessionMember.findMany({
+      where: { userId, sessionId: { in: targetSessionIds } },
+      select: { sessionId: true },
+    });
+
+    const validSessionIds = memberSessions.map((m) => m.sessionId);
+    if (validSessionIds.length === 0) {
+      throw new ForbiddenException('Not a member of any target session');
+    }
+
+    const forwardedMessages = await Promise.all(
+      validSessionIds.map((sid) =>
+        this.prisma.message.create({
+          data: {
+            sessionId: sid,
+            senderId: userId,
+            content: original.content,
+            contentType: original.contentType,
+            metadata: {
+              ...(original.metadata as Record<string, any> || {}),
+              forwardedFrom: original.senderId,
+              forwardedMessageId: original.id,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            reactions: true,
+          },
+        }),
+      ),
+    );
+
+    // Update session timestamps
+    await this.prisma.chatSession.updateMany({
+      where: { id: { in: validSessionIds } },
+      data: { updatedAt: new Date() },
+    });
+
+    return forwardedMessages;
   }
 
   async recallMessage(userId: string, messageId: string) {
@@ -473,6 +533,194 @@ export class ChatService {
     });
   }
 
+  async getSessionMembers(userId: string, sessionId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member) throw new ForbiddenException('Not a member of this session');
+
+    return this.prisma.chatSessionMember.findMany({
+      where: { sessionId },
+      include: {
+        user: { select: { id: true, username: true, avatarUrl: true, nickname: true, status: true } },
+      },
+      orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
+    });
+  }
+
+  async setAnnouncement(userId: string, sessionId: string, content: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only admins can set announcements');
+    }
+
+    await this.prisma.chatSession.update({
+      where: { id: sessionId },
+      data: {
+        announcement: content,
+        announcementUpdatedAt: new Date(),
+        announcementUpdaterId: userId,
+      },
+    });
+
+    // Create system message about announcement update
+    await this.prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        content: `📢 Announcement updated`,
+        contentType: 'system',
+        metadata: { announcement: content, updatedBy: userId },
+      },
+    });
+
+    return { content, updatedAt: new Date() };
+  }
+
+  async removeAnnouncement(userId: string, sessionId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only admins can remove announcements');
+    }
+
+    await this.prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { announcement: null, announcementUpdatedAt: null, announcementUpdaterId: null },
+    });
+  }
+
+  async generateInviteLink(userId: string, sessionId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only admins can generate invite links');
+    }
+
+    const code = `${sessionId.slice(0, 8)}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await this.prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { inviteCode: code, inviteCodeExpiresAt: expiresAt },
+    });
+
+    return { code, expiresAt, url: `/join?code=${code}` };
+  }
+
+  async joinByLink(userId: string, code: string) {
+    const session = await this.prisma.chatSession.findFirst({
+      where: { inviteCode: code },
+    });
+
+    if (!session) throw new NotFoundException('Invalid invite link');
+    if (session.inviteCodeExpiresAt && session.inviteCodeExpiresAt < new Date()) {
+      throw new ForbiddenException('Invite link has expired');
+    }
+
+    const existing = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: session.id, userId } },
+    });
+    if (existing) return { sessionId: session.id, alreadyMember: true };
+
+    await this.prisma.chatSessionMember.create({
+      data: { sessionId: session.id, userId, role: 'member' },
+    });
+
+    // System message
+    await this.prisma.message.create({
+      data: {
+        sessionId: session.id,
+        content: `joined the group via invite link`,
+        contentType: 'system',
+        metadata: { userId, invited: true },
+      },
+    });
+
+    return { sessionId: session.id, alreadyMember: false };
+  }
+
+  async globalSearch(
+    userId: string,
+    query: string,
+    options: {
+      sessionId?: string;
+      types?: string[];
+      page: number;
+      limit: number;
+    },
+  ) {
+    if (!query || query.length < 1) {
+      return { results: [], total: 0, page: options.page, limit: options.limit };
+    }
+
+    const userSessionIds = await this.prisma.chatSessionMember.findMany({
+      where: { userId },
+      select: { sessionId: true },
+    });
+
+    const allSessionIds = userSessionIds.map((s: { sessionId: string }) => s.sessionId);
+    if (allSessionIds.length === 0) {
+      return { results: [], total: 0, page: options.page, limit: options.limit };
+    }
+
+    const where: any = {
+      sessionId: options.sessionId || { in: allSessionIds },
+      isRecalled: false,
+      content: { contains: query, mode: 'insensitive' },
+    };
+
+    if (options.types?.length) {
+      where.contentType = { in: options.types };
+    }
+
+    const [total, messages] = await Promise.all([
+      this.prisma.message.count({ where }),
+      this.prisma.message.findMany({
+        where,
+        include: {
+          sender: {
+            select: { id: true, username: true, avatarUrl: true, nickname: true },
+          },
+          session: {
+            select: { id: true, name: true, sessionType: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (options.page - 1) * options.limit,
+        take: options.limit,
+      }),
+    ]);
+
+    const results = messages.map((msg: any) => ({
+      message: {
+        id: msg.id,
+        content: msg.content,
+        contentType: msg.contentType,
+        createdAt: msg.createdAt,
+        sender: msg.sender,
+      },
+      session: msg.session,
+      highlight: this.buildHighlight(msg.content, query),
+    }));
+
+    return { results, total, page: options.page, limit: options.limit };
+  }
+
+  private buildHighlight(content: string, query: string): string {
+    const idx = content.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return content.slice(0, 100);
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(content.length, idx + query.length + 60);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < content.length ? '...' : '';
+    return prefix + content.slice(start, end) + suffix;
+  }
+
   private async getUnreadCount(userId: string, sessionId: string, lastReadAt: Date | null): Promise<number> {
     const where: any = {
       sessionId,
@@ -484,6 +732,78 @@ export class ChatService {
     }
 
     return this.prisma.message.count({ where });
+  }
+
+  async toggleBookmark(userId: string, messageId: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: { session: { include: { members: true } } },
+    });
+
+    if (!message) throw new NotFoundException('Message not found');
+
+    const isMember = message.session.members.some((m) => m.userId === userId);
+    if (!isMember) throw new ForbiddenException('Not a member of this session');
+
+    const existing = await this.prisma.bookmark.findUnique({
+      where: { userId_messageId: { userId, messageId } },
+    });
+
+    if (existing) {
+      await this.prisma.bookmark.delete({ where: { id: existing.id } });
+      return { bookmarked: false };
+    }
+
+    await this.prisma.bookmark.create({
+      data: { userId, messageId },
+    });
+
+    return { bookmarked: true };
+  }
+
+  async getBookmarks(userId: string, limit: number) {
+    const bookmarks = await this.prisma.bookmark.findMany({
+      where: { userId },
+      include: {
+        message: {
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            session: { select: { id: true, name: true, sessionType: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return bookmarks.map((b) => ({
+      id: b.id,
+      bookmarkedAt: b.createdAt,
+      message: b.message,
+    }));
+  }
+
+  async togglePinSession(userId: string, sessionId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+
+    if (!member) throw new ForbiddenException('Not a member of this session');
+
+    if (member.pinnedAt) {
+      await this.prisma.chatSessionMember.update({
+        where: { sessionId_userId: { sessionId, userId } },
+        data: { pinnedAt: null },
+      });
+      return { pinned: false };
+    }
+
+    await this.prisma.chatSessionMember.update({
+      where: { sessionId_userId: { sessionId, userId } },
+      data: { pinnedAt: new Date() },
+    });
+
+    return { pinned: true };
   }
 
   async addReaction(userId: string, messageId: string, emoji: string) {

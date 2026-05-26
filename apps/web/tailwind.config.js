@@ -20,7 +20,7 @@ export default {
         bg: 'var(--color-bg)',
         surface: 'var(--color-surface)',
         border: 'var(--color-border)',
-        'text-primary': 'var(--color-text-primary)',
+        'text': 'var(--color-text)',
         'text-secondary': 'var(--color-text-secondary)',
         'text-muted': 'var(--color-text-muted)',
       },

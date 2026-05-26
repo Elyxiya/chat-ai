@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage';
 import KnowledgePage from './pages/KnowledgePage';
 import GroupManagementPage from './pages/GroupManagementPage';
 import AdminPage from './pages/AdminPage';
+import ProfilePage from './pages/ProfilePage';
 import { ToastProvider } from './components/Toast/ToastContainer';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -27,6 +28,8 @@ function ThemeInitializer() {
     } else {
       root.classList.remove('dark');
     }
+    // Enable transitions after initial render to avoid flash
+    requestAnimationFrame(() => root.classList.add('theme-ready'));
   }, [resolvedTheme]);
   return null;
 }
@@ -51,6 +54,7 @@ export default function App() {
         <Route path="agent" element={<EnhancedAgentPage />} />
         <Route path="agent/:sessionId" element={<EnhancedAgentPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
         <Route path="group/:sessionId" element={<GroupManagementPage />} />
         <Route path="admin" element={<AdminPage />} />

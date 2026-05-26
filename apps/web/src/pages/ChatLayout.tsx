@@ -7,6 +7,7 @@ import { useNotificationStore } from '@/stores/notification.store';
 import SessionList from '@/components/SessionList/SessionList';
 import NotificationPanel from '@/components/NotificationPanel/NotificationPanel';
 import UserSearchModal from '@/components/UserSearch/UserSearchModal';
+import GlobalSearchModal from '@/components/GlobalSearchModal';
 
 export default function ChatLayout() {
   const navigate = useNavigate();
@@ -15,7 +16,22 @@ export default function ChatLayout() {
   const { resolvedTheme, setTheme } = useThemeStore();
   const { unreadCount, setOpen, fetchUnreadCount } = useNotificationStore();
   const [showSearch, setShowSearch] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(true);
+      }
+      if (e.key === 'Escape') {
+        setShowGlobalSearch(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (accessToken) {
@@ -64,15 +80,17 @@ export default function ChatLayout() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <img
-            src={user?.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.username}`}
-            alt={user?.username}
-            className="w-10 h-10 rounded-full"
-          />
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{user?.nickname || user?.username}</p>
-            <p className="text-xs text-text-secondary truncate">{user?.username}</p>
-          </div>
+          <button onClick={() => { navigate('/profile'); setSidebarOpen(false); }} className="flex items-center gap-3 flex-1 min-w-0">
+            <img
+              src={user?.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.username}`}
+              alt={user?.username}
+              className="w-10 h-10 rounded-full flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0 text-left">
+              <p className="font-medium text-sm truncate">{user?.nickname || user?.username}</p>
+              <p className="text-xs text-text-secondary truncate">@{user?.username}</p>
+            </div>
+          </button>
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             className="p-2 hover:bg-border rounded-lg transition-colors"
@@ -162,14 +180,24 @@ export default function ChatLayout() {
           )}
         </nav>
 
-        {/* Search / Add friends */}
-        <div className="p-2 border-t border-border">
+        {/* Search */}
+        <div className="p-2 border-t border-border space-y-1">
+          <button
+            onClick={() => { setShowGlobalSearch(true); setSidebarOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-border rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>Search messages</span>
+            <kbd className="ml-auto px-1.5 py-0.5 text-[10px] font-mono bg-border rounded">Ctrl+K</kbd>
+          </button>
           <button
             onClick={() => { setShowSearch(true); setSidebarOpen(false); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-border rounded-lg transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
             Search users
           </button>
@@ -203,6 +231,7 @@ export default function ChatLayout() {
     </div>
     <NotificationPanel />
     {showSearch && <UserSearchModal onClose={() => setShowSearch(false)} />}
+    {showGlobalSearch && <GlobalSearchModal onClose={() => setShowGlobalSearch(false)} />}
     </>
   );
 }

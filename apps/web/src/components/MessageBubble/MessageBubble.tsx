@@ -23,10 +23,13 @@ interface MessageBubbleProps {
   message: ChatMessage;
   isOwn: boolean;
   onReaction?: (emoji: string) => void;
-  onReply?: (message: ChatMessage) => void;
+  onReply?: () => void;
+  onForward?: () => void;
+  onBookmark?: () => void;
+  bookmarked?: boolean;
 }
 
-export default function MessageBubble({ message, isOwn, onReaction, onReply }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, bookmarked }: MessageBubbleProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -110,8 +113,8 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
   }, [message]);
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative`}>
-      <div className={`max-w-[85%] md:max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative py-1`}>
+      <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`} ref={menuRef}>
         {!isOwn && message.sender && (
           <div className="flex items-center gap-2 mb-1 px-1">
             <LazyImage
@@ -134,12 +137,12 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
         )}
 
         <div
-          className={`px-3.5 py-2.5 rounded-2xl ${
+          className={`px-3.5 py-2.5 rounded-xl ${
             isOwn
-              ? 'bg-primary-600 text-white rounded-br-md'
+              ? 'bg-primary-600 text-white rounded-br-sm'
               : message.contentType === 'system'
                 ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 text-sm'
-                : 'bg-surface border border-border rounded-bl-md'
+                : 'bg-surface border border-border rounded-bl-sm'
           }`}
         >
           {content}
@@ -178,10 +181,22 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply }: M
               <span>Add Reaction</span>
             </button>
             <button
-              onClick={() => { if (onReply) { onReply(message); } setShowMenu(false); }}
+              onClick={() => { if (onReply) { onReply(); } setShowMenu(false); }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
               <span>Reply</span>
+            </button>
+            <button
+              onClick={() => { if (onForward) { onForward(); } setShowMenu(false); }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
+            >
+              <span>Forward</span>
+            </button>
+            <button
+              onClick={() => { if (onBookmark) { onBookmark(); } setShowMenu(false); }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
+            >
+              <span>{bookmarked ? 'Remove Bookmark' : 'Bookmark'}</span>
             </button>
           </div>
         )}

@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
   ParseUUIDPipe,
   BadRequestException,
 } from '@nestjs/common';
@@ -74,6 +75,26 @@ export class UploadController {
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
     );
+  }
+
+  @Get('files/:id')
+  async getFileInfo(
+    @Req() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.uploadService.getFileInfo(req.user.id, id);
+  }
+
+  @Get('files/:id/download')
+  async downloadFile(
+    @Req() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: any,
+  ) {
+    const { stream, fileName, mimeType } = await this.uploadService.downloadFile(req.user.id, id);
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    stream.pipe(res);
   }
 
   @Delete('files/:id')

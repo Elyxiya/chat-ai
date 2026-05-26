@@ -67,6 +67,8 @@ export const authApi = {
   resetPassword: (data: { email: string; code: string; newPassword: string }) =>
     noAuthClient.post('/auth/reset-password', data),
   me: () => apiClient.get('/auth/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.post('/auth/change-password', { currentPassword, newPassword }),
 };
 
 export const chatApi = {
@@ -100,6 +102,26 @@ export const chatApi = {
   getOnlineUsers: () => apiClient.get('/chat/online-users'),
   manageFriend: (friendId: string, data: { action: 'request' | 'accept' | 'reject' | 'block' }) =>
     apiClient.post(`/chat/friends/${friendId}`, data),
+  globalSearch: (params: { q: string; sessionId?: string; types?: string; page?: number; limit?: number }) =>
+    apiClient.get('/chat/search', { params }),
+  forwardMessage: (messageId: string, targetSessionIds: string[]) =>
+    apiClient.post('/chat/messages/forward', { messageId, targetSessionIds }),
+  getSessionMembers: (sessionId: string) =>
+    apiClient.get(`/chat/sessions/${sessionId}/members`),
+  setAnnouncement: (sessionId: string, content: string) =>
+    apiClient.post(`/chat/sessions/${sessionId}/announcement`, { content }),
+  removeAnnouncement: (sessionId: string) =>
+    apiClient.delete(`/chat/sessions/${sessionId}/announcement`),
+  generateInviteLink: (sessionId: string) =>
+    apiClient.post(`/chat/sessions/${sessionId}/invite-link`),
+  joinByLink: (code: string) =>
+    apiClient.post('/chat/sessions/join-by-link', { code }),
+  toggleBookmark: (messageId: string) =>
+    apiClient.post(`/chat/messages/${messageId}/bookmark`),
+  getBookmarks: (limit?: number) =>
+    apiClient.get('/chat/bookmarks', { params: { limit } }),
+  togglePinSession: (sessionId: string) =>
+    apiClient.patch(`/chat/sessions/${sessionId}/pin`),
   addReaction: (messageId: string, emoji: string) =>
     apiClient.post('/chat/reactions', { messageId, emoji }),
   removeReaction: (messageId: string, emoji: string) =>
@@ -149,21 +171,29 @@ export const knowledgeApi = {
 };
 
 export const uploadApi = {
-  uploadFile: (file: File, description?: string) => {
+  uploadFile: (file: File, onProgress?: (pct: number) => void, description?: string) => {
     const form = new FormData();
     form.append('file', file);
     if (description) form.append('description', description);
     return apiClient.post('/upload/file', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
     });
   },
-  uploadImage: (file: File) => {
+  uploadImage: (file: File, onProgress?: (pct: number) => void) => {
     const form = new FormData();
     form.append('file', file);
     return apiClient.post('/upload/image', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
     });
   },
+  getFileInfo: (id: string) => apiClient.get(`/upload/files/${id}`),
+  getDownloadUrl: (id: string) => `/api/v1/upload/files/${id}/download`,
   listFiles: (page?: number, pageSize?: number) =>
     apiClient.get('/upload/files', { params: { page, pageSize } }),
   deleteFile: (id: string) => apiClient.delete(`/upload/files/${id}`),

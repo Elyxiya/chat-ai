@@ -27,6 +27,7 @@ interface ChatState {
   joinSession: (sessionId: string) => void;
   leaveSession: (sessionId: string) => void;
   createSession: (data: { sessionType: string; name?: string; memberIds?: string[] }) => Promise<string>;
+  addMessageReaction: (sessionId: string, messageId: string, reaction: { id: string; emoji: string; userId: string; messageId: string; createdAt: string }) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -111,6 +112,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
           s.id === sessionId ? { ...s, unreadCount: 0 } : s,
         ),
       }));
+    });
+
+    socket.on('reaction', ({ messageId, sessionId, emoji, userId: rUserId }: { messageId: string; sessionId: string; emoji: string; userId: string }) => {
+      set((state) => {
+        const msgs = state.messages[sessionId];
+        if (!msgs) return state;
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: msgs.map((m) => {
+              if (m.id !== messageId) return m;
+              const existing = m.reactions?.some((r) => r.userId === rUserId && r.emoji === emoji);
+              if (existing) return m;
+              return {
+                ...m,
+                reactions: [
+                  ...(m.reactions || []),
+                  { id: `${messageId}_${rUserId}_${emoji}`, emoji, userId: rUserId, messageId, createdAt: new Date().toISOString() },
+                ],
+              };
+            }),
+          },
+        };
+      });
     });
 
     socket.on('disconnect', () => {
@@ -211,5 +236,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const session: ChatSession = res.data;
     set((state) => ({ sessions: [session, ...state.sessions] }));
     return session.id;
+  },
+
+  addMessageReaction: (sessionId, messageId, reaction) => {
+    set((state) => {
+      const msgs = state.messages[sessionId];
+      if (!msgs) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [sessionId]: msgs.map((m) =>
+            m.id === messageId
+              ? { ...m, reactions: [...(m.reactions || []), reaction] }
+              : m,
+          ),
+        },
+      };
+    });
   },
 }));

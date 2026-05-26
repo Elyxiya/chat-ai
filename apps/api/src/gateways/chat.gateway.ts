@@ -200,6 +200,23 @@ export class ChatGateway
     }
   }
 
+  @SubscribeMessage('reaction')
+  async handleReaction(
+    @MessageBody() data: { messageId: string; sessionId: string; emoji: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    this.server.to(`session:${data.sessionId}`).emit('reaction', {
+      messageId: data.messageId,
+      sessionId: data.sessionId,
+      emoji: data.emoji,
+      userId: user.id,
+      username: user.username,
+    });
+  }
+
   @SubscribeMessage('join_session')
   async handleJoinSession(
     @MessageBody() data: { sessionId: string },

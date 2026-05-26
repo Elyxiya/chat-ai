@@ -111,6 +111,53 @@ export class ChatController {
     );
   }
 
+  @Get('sessions/:sessionId/members')
+  @ApiOperation({ summary: 'Get session members' })
+  async getSessionMembers(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return success(await this.chatService.getSessionMembers(userId, sessionId));
+  }
+
+  @Post('sessions/:sessionId/announcement')
+  @ApiOperation({ summary: 'Set or update group announcement' })
+  async setAnnouncement(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { content: string },
+  ) {
+    return success(await this.chatService.setAnnouncement(userId, sessionId, body.content));
+  }
+
+  @Delete('sessions/:sessionId/announcement')
+  @ApiOperation({ summary: 'Remove group announcement' })
+  async removeAnnouncement(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    await this.chatService.removeAnnouncement(userId, sessionId);
+    return success(null);
+  }
+
+  @Post('sessions/:sessionId/invite-link')
+  @ApiOperation({ summary: 'Generate an invite link for a group session' })
+  async generateInviteLink(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return success(await this.chatService.generateInviteLink(userId, sessionId));
+  }
+
+  @Post('sessions/join-by-link')
+  @ApiOperation({ summary: 'Join a session via invite link' })
+  async joinByLink(
+    @CurrentUser('id') userId: string,
+    @Body() body: { code: string },
+  ) {
+    return success(await this.chatService.joinByLink(userId, body.code));
+  }
+
   @Post('messages/recall')
   @ApiOperation({ summary: 'Recall a message' })
   async recallMessage(
@@ -128,6 +175,17 @@ export class ChatController {
   ) {
     await this.chatService.markAsRead(userId, dto.sessionId, dto.lastMessageId);
     return success(null);
+  }
+
+  @Post('messages/forward')
+  @ApiOperation({ summary: 'Forward a message to other sessions' })
+  async forwardMessage(
+    @CurrentUser('id') userId: string,
+    @Body() body: { messageId: string; targetSessionIds: string[] },
+  ) {
+    return success(
+      await this.chatService.forwardMessage(userId, body.messageId, body.targetSessionIds),
+    );
   }
 
   @Post('sessions/:sessionId/members')
@@ -180,10 +238,57 @@ export class ChatController {
     return success(await this.chatService.searchUsers(userId, query));
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'Global search messages across all sessions' })
+  async globalSearch(
+    @CurrentUser('id') userId: string,
+    @Query('q') query: string,
+    @Query('sessionId') sessionId?: string,
+    @Query('types') types?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return success(
+      await this.chatService.globalSearch(userId, query, {
+        sessionId,
+        types: types?.split(','),
+        page: page || 1,
+        limit: limit || 20,
+      }),
+    );
+  }
+
   @Get('online-users')
   @ApiOperation({ summary: 'Get online users' })
   async getOnlineUsers() {
     return success(await this.chatService.getOnlineUsers());
+  }
+
+  @Post('messages/:id/bookmark')
+  @ApiOperation({ summary: 'Toggle bookmark on a message' })
+  async toggleBookmark(
+    @CurrentUser('id') userId: string,
+    @Param('id') messageId: string,
+  ) {
+    return success(await this.chatService.toggleBookmark(userId, messageId));
+  }
+
+  @Get('bookmarks')
+  @ApiOperation({ summary: 'Get all bookmarked messages' })
+  async getBookmarks(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return success(await this.chatService.getBookmarks(userId, limit ? Number(limit) : 50));
+  }
+
+  @Patch('sessions/:sessionId/pin')
+  @ApiOperation({ summary: 'Toggle pin status for a session' })
+  async togglePinSession(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return success(await this.chatService.togglePinSession(userId, sessionId));
   }
 
   @Post('reactions')

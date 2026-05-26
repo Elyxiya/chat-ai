@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { chatApi } from '@/api/client';
 import { ChatSession } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -12,6 +13,14 @@ export default function SessionList() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const currentPath = window.location.pathname;
+
+  const handleTogglePin = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await chatApi.togglePinSession(sessionId);
+      await useChatStore.getState().loadSessions();
+    } catch { /* ignore */ }
+  }, []);
 
   const filteredSessions = useMemo(() => {
     if (!searchQuery.trim()) return sessions;
@@ -26,6 +35,9 @@ export default function SessionList() {
       });
     });
   }, [sessions, searchQuery, user?.id]);
+
+  const pinnedSessions = useMemo(() => filteredSessions.filter((s) => s.pinnedAt), [filteredSessions]);
+  const normalSessions = useMemo(() => filteredSessions.filter((s) => !s.pinnedAt), [filteredSessions]);
 
   return (
     <div className="flex flex-col h-full">
@@ -81,7 +93,27 @@ export default function SessionList() {
           </div>
         ) : (
           <div className="space-y-0.5 px-2">
-            {filteredSessions.map((session) => (
+            {pinnedSessions.length > 0 && (
+              <>
+                <div className="px-1 py-1 text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Pinned</div>
+                {pinnedSessions.map((session) => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    isActive={currentPath === `/chat/${session.id}` || currentPath === `/agent/${session.id}`}
+                    currentUserId={user?.id}
+                    onlineUsers={onlineUsers}
+                    onClick={() => {
+                      const path = session.sessionType === 'agent' ? `/agent/${session.id}` : `/chat/${session.id}`;
+                      navigate(path);
+                    }}
+                    onTogglePin={(e) => handleTogglePin(session.id, e)}
+                  />
+                ))}
+                <div className="border-t border-border my-1" />
+              </>
+            )}
+            {normalSessions.map((session) => (
               <SessionItem
                 key={session.id}
                 session={session}
@@ -92,6 +124,7 @@ export default function SessionList() {
                   const path = session.sessionType === 'agent' ? `/agent/${session.id}` : `/chat/${session.id}`;
                   navigate(path);
                 }}
+                onTogglePin={(e) => handleTogglePin(session.id, e)}
               />
             ))}
           </div>
@@ -107,12 +140,14 @@ function SessionItem({
   currentUserId,
   onlineUsers,
   onClick,
+  onTogglePin,
 }: {
   session: ChatSession;
   isActive: boolean;
   currentUserId?: string;
   onlineUsers: Set<string>;
   onClick: () => void;
+  onTogglePin?: (e: React.MouseEvent) => void;
 }) {
   const otherMembers = session.members.filter((m) => m.user.id !== currentUserId);
   const displayName = session.sessionType === 'agent'
@@ -130,9 +165,12 @@ function SessionItem({
   const lastMessage = session.lastMessage;
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors group cursor-pointer ${
         isActive
           ? 'bg-primary-50 dark:bg-primary-900/30'
           : 'hover:bg-surface'
@@ -184,11 +222,22 @@ function SessionItem({
         )}
       </div>
 
+      {/* Pin button */}
+      <button
+        onClick={onTogglePin}
+        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-border rounded transition-all flex-shrink-0"
+        title={session.pinnedAt ? 'Unpin' : 'Pin'}
+      >
+        <svg className={`w-3.5 h-3.5 ${session.pinnedAt ? 'text-primary-600 opacity-100' : 'text-text-secondary'}`} fill={session.pinnedAt ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+        </svg>
+      </button>
+
       {session.unreadCount > 0 && (
         <span className="px-1.5 py-0.5 min-w-[20px] text-center bg-primary-600 text-white text-xs rounded-full">
           {session.unreadCount > 99 ? '99+' : session.unreadCount}
         </span>
       )}
-    </button>
+    </div>
   );
 }

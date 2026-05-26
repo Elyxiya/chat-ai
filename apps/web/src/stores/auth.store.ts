@@ -15,6 +15,7 @@ interface AuthState {
   logout: (reason?: 'expired' | 'manual') => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   updateUser: (data: Partial<User>) => void;
+  setUser: (user: User) => void;
   checkAuth: () => Promise<void>;
 }
 
@@ -64,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
       updateUser: (data) => {
         set((state) => ({ user: state.user ? { ...state.user, ...data } : null }));
       },
+      setUser: (user) => set({ user }),
 
       checkAuth: async () => {
         const { accessToken } = get();

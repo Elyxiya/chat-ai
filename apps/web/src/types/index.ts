@@ -22,6 +22,7 @@ export interface ChatSession {
   isPublic: boolean;
   myRole?: string;
   myNickname?: string | null;
+  pinnedAt?: string | null;
   lastReadAt?: string | null;
   lastMessage?: ChatMessage | null;
   unreadCount: number;

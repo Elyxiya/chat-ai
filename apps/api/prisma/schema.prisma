@@ -42,6 +42,7 @@ model User {
   toolLogs         AgentToolLog[]
   metrics          AgentMetric[]
   uploads          FileUpload[]
+  bookmarks        Bookmark[]
   notifications    Notification[]
   auditLogs        AuditLog[]
   knowledgeBases   KnowledgeBase[]
@@ -117,6 +118,11 @@ model ChatSession {
   ownerId     String?   @map("owner_id")
   isPublic    Boolean   @default(false) @map("is_public")
   maxMembers  Int       @default(500) @map("max_members")
+  announcement String?  @db.Text
+  announcementUpdatedAt DateTime? @map("announcement_updated_at")
+  announcementUpdaterId String? @map("announcement_updater_id")
+  inviteCode  String?   @unique @map("invite_code") @db.VarChar(100)
+  inviteCodeExpiresAt DateTime? @map("invite_code_expires_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -137,6 +143,7 @@ model ChatSessionMember {
   nickname   String?   @db.VarChar(100)
   joinedAt   DateTime  @default(now()) @map("joined_at")
   lastReadAt DateTime? @map("last_read_at")
+  pinnedAt   DateTime? @map("pinned_at")
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -167,6 +174,7 @@ model Message {
   replies    Message[]       @relation("ReplyTo")
   reactions  MessageReaction[]
   mentions   MessageMention[]
+  bookmarks  Bookmark[]
 
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([senderId])
@@ -197,6 +205,19 @@ model MessageMention {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("message_mentions")
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  messageId String   @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@map("bookmarks")
 }
 
 model AgentMemory {

@@ -7,21 +7,26 @@ interface VirtualizedMessageListProps {
   messages: ChatMessage[];
   userId?: string | null;
   typingIndicator?: React.ReactNode;
+  onReply?: (msg: ChatMessage) => void;
+  onForward?: (messageId: string) => void;
+  onBookmark?: (messageId: string) => void;
+  onReaction?: (messageId: string, emoji: string) => void;
+  bookmarkedIds?: Set<string>;
 }
 
-const ROW_ESTIMATED_SIZE = 80;
-const SCROLL_BOTTOM_THRESHOLD = 50;
+const ROW_ESTIMATED_SIZE = 120;
+const SCROLL_BOTTOM_THRESHOLD = 20;
 
 function getItemHeight(message: ChatMessage): number {
-  if (message.contentType === 'image' || message.contentType === 'video') return 340;
-  if (message.contentType === 'file') return 90;
-  if (message.contentType === 'audio') return 70;
-  if (message.contentType === 'ai_response') return Math.max(100, Math.ceil(message.content.length / 100) * 60);
+  if (message.contentType === 'image' || message.contentType === 'video') return 360;
+  if (message.contentType === 'file') return 130;
+  if (message.contentType === 'audio') return 110;
+  if (message.contentType === 'ai_response') return Math.max(140, Math.ceil(message.content.length / 100) * 60 + 40);
   const lines = message.content.split('\n').length;
-  return Math.max(60, lines * 24 + 50);
+  return Math.max(110, lines * 24 + 80);
 }
 
-export default function VirtualizedMessageList({ messages, userId, typingIndicator }: VirtualizedMessageListProps) {
+export default function VirtualizedMessageList({ messages, userId, typingIndicator, onReply, onForward, onBookmark, onReaction, bookmarkedIds }: VirtualizedMessageListProps) {
   const listRef = useRef<List>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(0);
@@ -29,6 +34,7 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
   const [isAtBottom, setIsAtBottom] = useState(true);
   const sizeMap = useRef<{ [key: number]: number }>({});
   const prevLengthRef = useRef(messages.length);
+  const rafRef = useRef<number | null>(null);
 
   // Observe container resize
   useEffect(() => {
@@ -44,13 +50,20 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
     return () => observer.disconnect();
   }, []);
 
-  // Auto-scroll to bottom on new messages if user was at bottom
+  // Scroll to bottom when new messages arrive and user is at bottom
   useEffect(() => {
-    if (messages.length > prevLengthRef.current && isAtBottom && listRef.current) {
-      listRef.current.scrollToItem(messages.length - 1, 'end');
-      setTimeout(() => listRef.current?.scrollToItem(messages.length - 1, 'end'), 50);
-    }
+    const prevLen = prevLengthRef.current;
     prevLengthRef.current = messages.length;
+
+    if (messages.length > prevLen && isAtBottom && listRef.current) {
+      // Reset size cache so react-window re-measures
+      // Then scroll in the next frame after rendering
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        listRef.current?.scrollToItem(messages.length - 1, 'end');
+        rafRef.current = null;
+      });
+    }
   }, [messages.length, isAtBottom]);
 
   // Reset size cache when messages change
@@ -84,14 +97,19 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
   const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const msg = messages[index];
     return (
-      <div style={style}>
+      <div style={style} className="px-5">
         <MessageBubble
           message={msg}
           isOwn={msg.senderId === userId}
+          onReply={onReply ? () => onReply(msg) : undefined}
+          onForward={onForward ? () => onForward(msg.id) : undefined}
+          onBookmark={onBookmark ? () => onBookmark(msg.id) : undefined}
+          onReaction={onReaction ? (emoji) => onReaction(msg.id, emoji) : undefined}
+          bookmarked={bookmarkedIds?.has(msg.id)}
         />
       </div>
     );
-  }, [messages, userId]);
+  }, [messages, userId, onReply, onForward, onBookmark, onReaction, bookmarkedIds]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">

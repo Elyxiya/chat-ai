@@ -19,6 +19,11 @@ export class UserController {
     return success(await this.userService.getProfile(userId));
   }
 
+  @Get('profile/me')
+  async getMyProfile(@CurrentUser('id') userId: string) {
+    return success(await this.userService.getProfile(userId));
+  }
+
   @Patch('profile')
   async updateProfile(
     @CurrentUser('id') currentUserId: string,
