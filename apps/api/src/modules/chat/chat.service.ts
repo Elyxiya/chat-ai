@@ -395,6 +395,22 @@ export class ChatService {
   }
 
   private async sendFriendRequestNotification(userId: string, friendId: string) {
+    // Check if a pending friend_request notification already exists for this pair
+    const existingNotif = await this.prisma.notification.findFirst({
+      where: {
+        userId: friendId,
+        type: 'friend_request',
+        isRead: false,
+        // Match notifications where data->requesterId matches the requester
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    // If there's an unread friend_request notification for this pair, skip sending another
+    if (existingNotif) {
+      const data = existingNotif.data as Record<string, any> | undefined;
+      if (data?.requesterId === userId) return;
+    }
+
     const requester = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!requester) return;
     const requesterName = requester.nickname || requester.username || 'Someone';

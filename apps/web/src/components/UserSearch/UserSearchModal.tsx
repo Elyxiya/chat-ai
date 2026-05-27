@@ -12,6 +12,7 @@ export default function UserSearchModal({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [friendStatus, setFriendStatus] = useState<Record<string, string>>({});
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -27,10 +28,13 @@ export default function UserSearchModal({ onClose }: { onClose: () => void }) {
   };
 
   const handleAction = async (targetUserId: string, action: 'request' | 'accept' | 'reject' | 'block') => {
+    if (actionLoading === targetUserId) return; // Prevent double-click
+    setActionLoading(targetUserId);
     try {
       await chatApi.manageFriend(targetUserId, { action });
       setFriendStatus((prev) => ({ ...prev, [targetUserId]: action === 'request' ? 'pending' : 'accepted' }));
     } catch { /* ignore */ }
+    finally { setActionLoading(null); }
   };
 
   const handleStartChat = async (userId: string) => {
@@ -103,9 +107,9 @@ export default function UserSearchModal({ onClose }: { onClose: () => void }) {
                             ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
                             : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                       }`}
-                      disabled={friendStatus[u.id] === 'pending'}
+                      disabled={friendStatus[u.id] === 'pending' || actionLoading === u.id}
                     >
-                      {friendStatus[u.id] === 'accepted' ? 'Blocked' : friendStatus[u.id] === 'pending' ? 'Pending' : 'Add Friend'}
+                      {friendStatus[u.id] === 'accepted' ? 'Blocked' : friendStatus[u.id] === 'pending' ? 'Pending' : actionLoading === u.id ? '...' : 'Add Friend'}
                     </button>
                   )}
                 </div>
