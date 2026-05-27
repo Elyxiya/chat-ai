@@ -411,7 +411,11 @@ export class ChatService {
         // Send friend request notification
         const requester = await this.prisma.user.findUnique({ where: { id: userId } });
         const requesterName = requester?.nickname || requester?.username || 'Someone';
-        this.notificationService.createFriendRequest(userId, friendId, requesterName).catch(() => {});
+        try {
+          await this.notificationService.createFriendRequest(userId, friendId, requesterName);
+        } catch (err) {
+          this.logger.error(`Failed to send friend request notification from ${userId} to ${friendId}: ${err.message}`);
+        }
 
         return this.prisma.friendship.create({
           data: { userId, friendId, status: 'pending' },

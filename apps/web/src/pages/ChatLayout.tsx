@@ -39,6 +39,13 @@ export default function ChatLayout() {
     }
   }, [accessToken, fetchUnreadCount]);
 
+  // Poll unread count every 30s as fallback for missed WebSocket events
+  useEffect(() => {
+    if (!accessToken) return;
+    const interval = setInterval(() => { fetchUnreadCount(); }, 30000);
+    return () => clearInterval(interval);
+  }, [accessToken, fetchUnreadCount]);
+
   useEffect(() => {
     checkAuth().then(() => {
       const token = useAuthStore.getState().accessToken;
