@@ -34,7 +34,6 @@ export default function NotificationPanel() {
   } = useNotificationStore();
 
   const handleNotificationClick = (notification: AppNotification) => {
-    if (!notification.isRead) markAsRead(notification.id);
     setOpen(false);
 
     const data = notification.data || {};
@@ -129,7 +128,7 @@ export default function NotificationPanel() {
                         e.stopPropagation();
                         deleteNotification(notification.id);
                       }}
-                      className="p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
+                      className="p-1 hover:text-red-500 transition-colors flex-shrink-0"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

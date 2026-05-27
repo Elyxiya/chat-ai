@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { useAuthStore } from './auth.store';
 
+const MAX_NOTIFICATIONS = 100;
+
 export interface Notification {
   id: string;
   type: string;
@@ -39,7 +41,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      set({ notifications: data.data || [] });
+      const loaded = data.data || [];
+      set({ notifications: loaded.length > MAX_NOTIFICATIONS ? loaded.slice(0, MAX_NOTIFICATIONS) : loaded });
     } catch { /* ignore */ }
   },
 
@@ -105,9 +108,15 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   },
 
   addNotification: (notification) => {
-    set((state) => ({
-      notifications: [{ ...notification, isRead: false }, ...state.notifications],
-      unreadCount: state.unreadCount + 1,
-    }));
+    set((state) => {
+      const updated = [{ ...notification, isRead: false }, ...state.notifications];
+      const trimmed = updated.length > MAX_NOTIFICATIONS
+        ? updated.slice(0, MAX_NOTIFICATIONS)
+        : updated;
+      return {
+        notifications: trimmed,
+        unreadCount: state.unreadCount + 1,
+      };
+    });
   },
 }));
