@@ -394,6 +394,17 @@ export class ChatService {
     return friendships.map((f: { userId: string; friendId: string; friend: any; user: any }) => (f.userId === userId ? f.friend : f.user));
   }
 
+  private async sendFriendRequestNotification(userId: string, friendId: string) {
+    const requester = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!requester) return;
+    const requesterName = requester.nickname || requester.username || 'Someone';
+    try {
+      await this.notificationService.createFriendRequest(userId, friendId, requesterName);
+    } catch (err) {
+      this.logger.error(`Failed to send friend request notification from ${userId} to ${friendId}: ${err.message}`);
+    }
+  }
+
   async manageFriend(userId: string, friendId: string, action: string) {
     switch (action) {
       case 'request': {
@@ -406,16 +417,15 @@ export class ChatService {
           },
         });
 
-        if (existing) return { status: existing.status };
-
-        // Send friend request notification
-        const requester = await this.prisma.user.findUnique({ where: { id: userId } });
-        const requesterName = requester?.nickname || requester?.username || 'Someone';
-        try {
-          await this.notificationService.createFriendRequest(userId, friendId, requesterName);
-        } catch (err) {
-          this.logger.error(`Failed to send friend request notification from ${userId} to ${friendId}: ${err.message}`);
+        if (existing) {
+          // Still send notification if pending — the first one may have been missed
+          if (existing.status === 'pending') {
+            await this.sendFriendRequestNotification(userId, friendId);
+          }
+          return { status: existing.status };
         }
+
+        await this.sendFriendRequestNotification(userId, friendId);
 
         return this.prisma.friendship.create({
           data: { userId, friendId, status: 'pending' },
