@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { ChatSession, ChatMessage, WsMessageType } from '@/types';
 import { chatApi } from '@/api/client';
 import { io, Socket } from 'socket.io-client';
+import { useNotificationStore } from './notification.store';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
 
@@ -136,6 +137,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         };
       });
+    });
+
+    socket.on('notification', (notification: any) => {
+      useNotificationStore.getState().addNotification(notification);
     });
 
     socket.on('disconnect', () => {

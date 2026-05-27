@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { RedisService } from '../common/redis.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   CreateSessionDto,
   SendMessageDto,
@@ -15,6 +16,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async getUserSessions(userId: string) {
@@ -405,6 +407,11 @@ export class ChatService {
         });
 
         if (existing) return { status: existing.status };
+
+        // Send friend request notification
+        const requester = await this.prisma.user.findUnique({ where: { id: userId } });
+        const requesterName = requester?.nickname || requester?.username || 'Someone';
+        this.notificationService.createFriendRequest(userId, friendId, requesterName).catch(() => {});
 
         return this.prisma.friendship.create({
           data: { userId, friendId, status: 'pending' },
