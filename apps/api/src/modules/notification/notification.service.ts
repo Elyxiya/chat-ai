@@ -54,10 +54,11 @@ export class NotificationService {
   }
 
   async findAll(userId: string, limit = 50) {
+    const take = typeof limit === 'number' && !isNaN(limit) ? limit : 50;
     return this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      take,
     });
   }
 

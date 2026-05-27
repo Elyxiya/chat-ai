@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { chatApi } from '@/api/client';
 import { useNotificationStore, Notification as AppNotification } from '@/stores/notification.store';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -19,8 +20,19 @@ const NOTIFICATION_COLORS: Record<string, string> = {
   system: 'bg-gray-50 dark:bg-gray-800 border-border',
 };
 
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return '';
+  }
+}
+
 export default function NotificationPanel() {
   const navigate = useNavigate();
+  const [friendActionLoading, setFriendActionLoading] = useState<string | null>(null);
   const {
     notifications,
     unreadCount,
@@ -28,9 +40,9 @@ export default function NotificationPanel() {
     setOpen,
     fetchNotifications,
     fetchUnreadCount,
-    markAsRead,
     markAllAsRead,
     deleteNotification,
+    deleteAll,
   } = useNotificationStore();
 
   const handleNotificationClick = (notification: AppNotification) => {
@@ -42,6 +54,16 @@ export default function NotificationPanel() {
     } else if (notification.type === 'friend_request' && data.requesterId) {
       navigate(`/chat`);
     }
+  };
+
+  const handleFriendAction = async (requesterId: string, action: 'accept' | 'reject', notificationId: string) => {
+    if (friendActionLoading === notificationId) return;
+    setFriendActionLoading(notificationId);
+    try {
+      await chatApi.manageFriend(requesterId, { action });
+      await deleteNotification(notificationId);
+    } catch { /* ignore */ }
+    finally { setFriendActionLoading(null); }
   };
 
   useEffect(() => {
@@ -80,6 +102,12 @@ export default function NotificationPanel() {
               </button>
             )}
             <button
+              onClick={deleteAll}
+              className="text-xs text-text-secondary hover:text-red-500 px-2 py-1 rounded"
+            >
+              Delete all
+            </button>
+            <button
               onClick={() => setOpen(false)}
               className="p-1.5 hover:bg-border rounded transition-colors"
             >
@@ -101,7 +129,7 @@ export default function NotificationPanel() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-3 group hover:bg-bg transition-colors cursor-pointer ${
+                  className={`relative p-3 group hover:bg-bg transition-colors cursor-pointer ${
                     !notification.isRead ? NOTIFICATION_COLORS[notification.type] || '' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
@@ -119,8 +147,32 @@ export default function NotificationPanel() {
                           {notification.content}
                         </p>
                       )}
+                      {notification.type === 'friend_request' && notification.data?.requesterId && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleFriendAction(notification.data.requesterId, 'accept', notification.id);
+                            }}
+                            disabled={friendActionLoading === notification.id}
+                            className="px-2.5 py-1 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                          >
+                            {friendActionLoading === notification.id ? '...' : 'Accept'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleFriendAction(notification.data.requesterId, 'reject', notification.id);
+                            }}
+                            disabled={friendActionLoading === notification.id}
+                            className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            {friendActionLoading === notification.id ? '...' : 'Reject'}
+                          </button>
+                        </div>
+                      )}
                       <p className="text-xs text-text-secondary mt-1 opacity-60">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        {formatTime(notification.createdAt)}
                       </p>
                     </div>
                     <button

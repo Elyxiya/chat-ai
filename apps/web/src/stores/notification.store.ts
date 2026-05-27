@@ -22,6 +22,7 @@ interface NotificationState {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
+  deleteAll: () => Promise<void>;
   setOpen: (open: boolean) => void;
   addNotification: (notification: Notification) => void;
 }
@@ -107,8 +108,23 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     } catch { /* ignore */ }
   },
 
+  deleteAll: async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    try {
+      await fetch('/api/v1/notifications', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      set({ notifications: [], unreadCount: 0 });
+    } catch { /* ignore */ }
+  },
+
   addNotification: (notification) => {
     set((state) => {
+      if (state.notifications.some((n) => n.id === notification.id)) {
+        return { notifications: state.notifications, unreadCount: state.unreadCount };
+      }
       const updated = [{ ...notification, isRead: false }, ...state.notifications];
       const trimmed = updated.length > MAX_NOTIFICATIONS
         ? updated.slice(0, MAX_NOTIFICATIONS)
