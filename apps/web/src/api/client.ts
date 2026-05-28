@@ -138,6 +138,19 @@ export const chatApi = {
     apiClient.post('/chat/reactions', { messageId, emoji }),
   removeReaction: (messageId: string, emoji: string) =>
     apiClient.delete('/chat/reactions', { data: { messageId, emoji } }),
+
+  // Channel APIs
+  getChannels: () => apiClient.get('/chat/channels'),
+  createChannel: (data: { name: string; description?: string; isPublic?: boolean }) =>
+    apiClient.post('/chat/channels', data),
+  updateChannel: (channelId: string, data: { name?: string; description?: string; avatarUrl?: string; whoCanPost?: string }) =>
+    apiClient.patch(`/chat/channels/${channelId}`, data),
+  deleteChannel: (channelId: string) =>
+    apiClient.delete(`/chat/channels/${channelId}`),
+  subscribeChannel: (channelId: string) =>
+    apiClient.post(`/chat/channels/${channelId}/subscribe`),
+  unsubscribeChannel: (channelId: string) =>
+    apiClient.post(`/chat/channels/${channelId}/unsubscribe`),
 };
 
 export const agentApi = {

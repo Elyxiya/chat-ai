@@ -5,6 +5,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import SessionList from '@/components/SessionList/SessionList';
+import ChannelList from '@/components/ChannelList/ChannelList';
 import NotificationPanel from '@/components/NotificationPanel/NotificationPanel';
 import UserSearchModal from '@/components/UserSearch/UserSearchModal';
 import GlobalSearchModal from '@/components/GlobalSearchModal';
@@ -208,6 +209,11 @@ export default function ChatLayout() {
             </svg>
             Search users
           </button>
+        </div>
+
+        {/* Channel list */}
+        <div className="border-t border-border">
+          <ChannelList />
         </div>
 
         {/* Session list */}

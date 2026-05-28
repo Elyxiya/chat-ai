@@ -33,6 +33,62 @@ import { success } from '../common/result';
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
+  // ======== Channel (Broadcast) Routes ========
+
+  @Get('channels')
+  @ApiOperation({ summary: 'Get all subscribed channels' })
+  async getSubscribedChannels(@CurrentUser('id') userId: string) {
+    return success(await this.chatService.getSubscribedChannels(userId));
+  }
+
+  @Post('channels')
+  @ApiOperation({ summary: 'Create a new channel' })
+  async createChannel(
+    @CurrentUser('id') userId: string,
+    @Body() body: { name: string; description?: string; isPublic?: boolean },
+  ) {
+    return success(await this.chatService.createChannel(userId, body));
+  }
+
+  @Patch('channels/:channelId')
+  @ApiOperation({ summary: 'Update channel settings' })
+  async updateChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+    @Body() body: { name?: string; description?: string; avatarUrl?: string; whoCanPost?: string },
+  ) {
+    return success(await this.chatService.updateChannel(userId, channelId, body));
+  }
+
+  @Delete('channels/:channelId')
+  @ApiOperation({ summary: 'Delete a channel' })
+  async deleteChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return success(await this.chatService.deleteChannel(userId, channelId));
+  }
+
+  @Post('channels/:channelId/subscribe')
+  @ApiOperation({ summary: 'Subscribe to a channel' })
+  async subscribeChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return success(await this.chatService.subscribeChannel(userId, channelId));
+  }
+
+  @Post('channels/:channelId/unsubscribe')
+  @ApiOperation({ summary: 'Unsubscribe from a channel' })
+  async unsubscribeChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return success(await this.chatService.unsubscribeChannel(userId, channelId));
+  }
+
+  // ======== Session Routes ========
+
   @Get('sessions')
   @ApiOperation({ summary: 'Get all chat sessions for current user' })
   async getSessions(@CurrentUser('id') userId: string) {

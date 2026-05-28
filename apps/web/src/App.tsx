@@ -51,6 +51,7 @@ export default function App() {
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="chat" element={<PrivateChatPage />} />
         <Route path="chat/:sessionId" element={<PrivateChatPage />} />
+        <Route path="channel/:sessionId" element={<PrivateChatPage />} />
         <Route path="agent" element={<EnhancedAgentPage />} />
         <Route path="agent/:sessionId" element={<EnhancedAgentPage />} />
         <Route path="settings" element={<SettingsPage />} />

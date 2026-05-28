@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { ChatMessage } from '@/types';
@@ -12,6 +12,7 @@ import { chatApi, uploadApi } from '@/api/client';
 
 export default function PrivateChatPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
     sessions,
@@ -173,6 +174,12 @@ export default function PrivateChatPage() {
           <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm">
             {chatName[0]?.toUpperCase()}
           </div>
+        ) : session?.sessionType === 'channel' ? (
+          <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+            </svg>
+          </div>
         ) : otherMembers.length === 1 ? (
           <img
             src={otherMembers[0].user.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${otherMembers[0].user.username}`}
@@ -187,12 +194,21 @@ export default function PrivateChatPage() {
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-sm truncate">{chatName}</h2>
-          {otherMembers.length > 0 && (
+          <h2 className="font-semibold text-sm truncate flex items-center gap-2">
+            {chatName}
+            {session?.sessionType === 'channel' && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded font-normal">Channel</span>
+            )}
+          </h2>
+          {session?.sessionType === 'channel' ? (
+            <p className="text-xs text-text-secondary truncate">
+              {session._count?.members || session.members?.length || 0} subscribers
+            </p>
+          ) : otherMembers.length > 0 ? (
             <p className="text-xs text-text-secondary truncate">
               {otherMembers.map((m) => m.user.username).join(', ')}
             </p>
-          )}
+          ) : null}
         </div>
         {session?.sessionType === 'group' && (
           <button
@@ -205,16 +221,34 @@ export default function PrivateChatPage() {
             </svg>
           </button>
         )}
-        {/* Batch mode toggle */}
-        <button
-          onClick={() => useChatStore.getState().toggleBatchMode()}
-          className={`p-2 hover:bg-border rounded-lg transition-colors ${useChatStore.getState().batchMode ? 'text-primary-600 bg-primary-50' : ''}`}
-          title="Select messages"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-        </button>
+        {session?.sessionType === 'channel' && session.myRole !== 'owner' && (
+          <button
+            onClick={async () => {
+              if (session.myRole === 'member') {
+                await chatApi.unsubscribeChannel(session.id);
+                navigate('/chat');
+              }
+            }}
+            className="p-2 hover:bg-border rounded-lg transition-colors"
+            title="Unsubscribe"
+          >
+            <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        {/* Batch mode toggle — not in channel readonly mode */}
+        {session?.sessionType !== 'channel' && (
+          <button
+            onClick={() => useChatStore.getState().toggleBatchMode()}
+            className={`p-2 hover:bg-border rounded-lg transition-colors ${useChatStore.getState().batchMode ? 'text-primary-600 bg-primary-50' : ''}`}
+            title="Select messages"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </button>
+        )}
       </header>
 
       {/* Batch toolbar */}

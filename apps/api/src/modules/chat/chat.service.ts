@@ -226,6 +226,18 @@ export class ChatService {
 
     if (!member) throw new ForbiddenException('Not a member of this session');
 
+    // Channel posting permission check
+    const sessionInfo = await this.prisma.chatSession.findUnique({
+      where: { id: sessionId },
+      select: { sessionType: true, whoCanPost: true },
+    });
+
+    if (sessionInfo?.sessionType === 'channel') {
+      if (sessionInfo.whoCanPost === 'admin' && member.role !== 'owner' && member.role !== 'admin') {
+        throw new ForbiddenException('Only channel admins can post');
+      }
+    }
+
     // Detect @all / @everyone mention
     const hasAtAll = /\B@(all|everyone)\b/i.test(dto.content);
     let atAllTargets: string[] = [];
@@ -1156,5 +1168,132 @@ export class ChatService {
     });
 
     return { success: true };
+  }
+
+  // ======== Channel (Broadcast) Operations ========
+
+  async createChannel(userId: string, dto: { name: string; description?: string; isPublic?: boolean }) {
+    const session = await this.prisma.chatSession.create({
+      data: {
+        sessionType: 'channel',
+        name: dto.name,
+        description: dto.description,
+        isPublic: dto.isPublic ?? false,
+        ownerId: userId,
+        whoCanPost: 'admin',
+        members: {
+          create: { userId, role: 'owner' },
+        },
+      },
+      include: {
+        owner: { select: { id: true, username: true, avatarUrl: true } },
+        members: {
+          include: {
+            user: { select: { id: true, username: true, avatarUrl: true, status: true } },
+          },
+        },
+        _count: { select: { members: true, messages: true } },
+      },
+    });
+
+    return session;
+  }
+
+  async updateChannel(userId: string, channelId: string, dto: { name?: string; description?: string; avatarUrl?: string; whoCanPost?: string }) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (!member || member.role !== 'owner') throw new ForbiddenException('Only channel owner can update');
+
+    return this.prisma.chatSession.update({
+      where: { id: channelId },
+      data: {
+        name: dto.name,
+        description: dto.description,
+        avatarUrl: dto.avatarUrl,
+        whoCanPost: dto.whoCanPost,
+      },
+      include: { _count: { select: { members: true, messages: true } } },
+    });
+  }
+
+  async deleteChannel(userId: string, channelId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (!member || member.role !== 'owner') throw new ForbiddenException('Only channel owner can delete');
+
+    await this.prisma.chatSession.delete({ where: { id: channelId } });
+    return { deleted: true };
+  }
+
+  async subscribeChannel(userId: string, channelId: string) {
+    const session = await this.prisma.chatSession.findUnique({
+      where: { id: channelId },
+      select: { sessionType: true, maxMembers: true, _count: { select: { members: true } } },
+    });
+    if (!session || session.sessionType !== 'channel') throw new NotFoundException('Channel not found');
+    if (session._count.members >= session.maxMembers) throw new ForbiddenException('Channel is full');
+
+    const existing = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (existing) return { subscribed: true, alreadyMember: true };
+
+    await this.prisma.chatSessionMember.create({
+      data: { sessionId: channelId, userId, role: 'member' },
+    });
+
+    return { subscribed: true, alreadyMember: false };
+  }
+
+  async unsubscribeChannel(userId: string, channelId: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (!member) throw new NotFoundException('Not subscribed to this channel');
+
+    // Owner cannot unsubscribe (must delete)
+    if (member.role === 'owner') throw new ForbiddenException('Channel owner cannot unsubscribe');
+
+    await this.prisma.chatSessionMember.delete({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+
+    return { unsubscribed: true };
+  }
+
+  async getSubscribedChannels(userId: string) {
+    const memberships = await this.prisma.chatSessionMember.findMany({
+      where: { userId },
+      include: {
+        session: {
+          include: {
+            owner: { select: { id: true, username: true, avatarUrl: true } },
+            _count: { select: { members: true, messages: true } },
+          },
+        },
+      },
+      orderBy: { joinedAt: 'desc' },
+    });
+
+    return memberships
+      .filter((m: any) => m.session?.sessionType === 'channel')
+      .map((m: any) => ({
+        ...m.session,
+        myRole: m.role,
+        pinnedAt: m.pinnedAt,
+        lastReadAt: m.lastReadAt,
+      }));
+  }
+
+  async canPostInChannel(userId: string, channelId: string): Promise<boolean> {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+      include: { session: { select: { whoCanPost: true } } },
+    });
+    if (!member) return false;
+    if (member.session.whoCanPost === 'anyone') return true;
+    return member.role === 'owner' || member.role === 'admin';
   }
 }

@@ -118,6 +118,7 @@ model ChatSession {
   ownerId     String?   @map("owner_id")
   isPublic    Boolean   @default(false) @map("is_public")
   maxMembers  Int       @default(500) @map("max_members")
+  whoCanPost  String    @default("admin") @map("who_can_post") @db.VarChar(20)
   announcement String?  @db.Text
   announcementUpdatedAt DateTime? @map("announcement_updated_at")
   announcementUpdaterId String? @map("announcement_updater_id")
