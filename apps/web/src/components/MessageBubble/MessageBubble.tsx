@@ -5,14 +5,13 @@ import { format } from 'date-fns';
 import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
 import LazyImage from '../LazyImage/LazyImage';
 import ReadReceiptPanel from '../ReadReceiptPanel/ReadReceiptPanel';
+import EmojiPicker from '../EmojiPicker/EmojiPicker';
 
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
 });
-
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -224,16 +223,11 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
 
         {/* Reaction picker */}
         {showReactions && (
-          <div className="absolute z-10 mt-1 bg-surface border border-border rounded-full shadow-lg px-2 py-1 flex items-center gap-1">
-            {QUICK_REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => { if (onReaction) { onReaction(emoji); } setShowReactions(false); }}
-                className="text-lg hover:scale-125 transition-transform"
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="absolute z-10 mt-1">
+            <EmojiPicker
+              onSelect={(emoji) => { if (onReaction) { onReaction(emoji); } setShowReactions(false); }}
+              onClose={() => setShowReactions(false)}
+            />
           </div>
         )}
       </div>
