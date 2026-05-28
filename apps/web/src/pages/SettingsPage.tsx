@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/auth.store';
 import { userApi } from '@/api/client';
 
 export default function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const { user, logout, updateUser } = useAuthStore();
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -45,11 +47,34 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+
+      {/* Language */}
+      <div className="card p-6 space-y-4">
+        <h2 className="text-lg font-semibold">{t('settings.language')}</h2>
+        <div className="flex gap-2">
+          {[
+            { code: 'zh-CN', label: t('settings.languageZh') },
+            { code: 'en-US', label: t('settings.languageEn') },
+          ].map((lang) => (
+            <button
+              key={lang.code}
+              onClick={() => i18n.changeLanguage(lang.code)}
+              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                i18n.language === lang.code
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-border hover:bg-border/80'
+              }`}
+            >
+              {lang.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Profile */}
       <div className="card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Profile</h2>
+        <h2 className="text-lg font-semibold">{t('profile.profileInfo')}</h2>
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
@@ -86,37 +111,37 @@ export default function SettingsPage() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Nickname</label>
+          <label className="block text-sm font-medium mb-1">{t('profile.nickname')}</label>
           <input
             type="text"
             className="input-field"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
-            placeholder="Display name"
+            placeholder={t('profile.nicknamePlaceholder')}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Bio</label>
+          <label className="block text-sm font-medium mb-1">{t('profile.bio')}</label>
           <textarea
             className="input-field resize-none"
             rows={3}
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            placeholder="Tell us about yourself"
+            placeholder={t('profile.bioPlaceholder')}
           />
         </div>
         <button onClick={handleSave} disabled={saving} className="btn-primary">
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
         {msg && <p className="text-sm text-primary-600">{msg}</p>}
       </div>
 
       {/* AI Settings */}
       <div className="card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">AI Agent Settings</h2>
+        <h2 className="text-lg font-semibold">{t('agent.title')}</h2>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium">Default Mode</p>
+            <p className="font-medium">{t('settings.title')}</p>
             <p className="text-sm text-text-secondary">Choose default reasoning mode</p>
           </div>
           <select className="input-field w-40">
@@ -134,7 +159,7 @@ export default function SettingsPage() {
           onClick={() => logout()}
           className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
         >
-          Sign Out
+          {t('auth.logout')}
         </button>
       </div>
     </div>
