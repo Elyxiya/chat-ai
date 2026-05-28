@@ -80,8 +80,8 @@ jobs:
       - name: Lint
         run: pnpm --filter ai-native-chat-api lint
 
-      - name: Run tests
-        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2
+      - name: Run tests with coverage
+        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
           REDIS_HOST: localhost
@@ -129,6 +129,95 @@ jobs:
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:3000' }}
 
+  coverage-api:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test-api]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install
+      - run: pnpm --filter ai-native-chat-api prisma:generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
+      - run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
+          REDIS_HOST: localhost
+          JWT_SECRET: test_jwt_secret
+          JWT_REFRESH_SECRET: test_jwt_refresh
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY || '' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: apps/api/coverage
+          flags: api
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-api
+          path: apps/api/coverage/
+          retention-days: 7
+
+  docker-build-push:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test-api, lint-and-test-web, e2e-tests]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata (API)
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/api
+          tags: type=sha,prefix=,enable=true,priority=600
+      - name: Build and push API
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/api
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            DATABASE_URL=postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+      - name: Extract metadata (Web)
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/web
+          tags: type=sha,prefix=
+      - name: Build and push Web
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/web
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   e2e-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -159,72 +248,24 @@ jobs:
       - name: Run E2E tests
         run: pnpm --filter ai-native-chat-web test:e2e
 
-  # 以下为 CD 部分，部署环境就绪后取消注释即可使用
-  # docker-build-push:
-  #   runs-on: ubuntu-latest
-  #   needs: [lint-and-test-api, lint-and-test-web]
-  #   if: github.ref == 'refs/heads/main'
-  #   permissions:
-  #     contents: read
-  #     packages: write
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
-  #     - name: Log in to GHCR
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
-  #     - name: Extract metadata (API)
-  #       id: meta-api
-  #       uses: docker/metadata-action@v5
-  #       with:
-  #         images: ghcr.io/${{ github.repository }}/api
-  #         tags: type=sha,prefix=
-  #     - name: Build and push API
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: apps/api
-  #         push: true
-  #         tags: ${{ steps.meta-api.outputs.tags }}
-  #         labels: ${{ steps.meta-api.outputs.labels }}
-  #         cache-from: type=gha
-  #         cache-to: type=gha,mode=max
-  #         build-args: |
-  #           DATABASE_URL=postgresql://minichat:${{ secrets.DB_PASSWORD }}@postgres:5432/minichat
-  #           JWT_SECRET=${{ secrets.JWT_SECRET }}
-  #     - name: Extract metadata (Web)
-  #       id: meta-web
-  #       uses: docker/metadata-action@v5
-  #       with:
-  #         images: ghcr.io/${{ github.repository }}/web
-  #         tags: type=sha,prefix=
-  #     - name: Build and push Web
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: apps/web
-  #         push: true
-  #         tags: ${{ steps.meta-web.outputs.tags }}
-  #         labels: ${{ steps.meta-web.outputs.labels }}
-  #         cache-from: type=gha
-  #         cache-to: type=gha,mode=max
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [docker-build-push, coverage-api]
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Deploy to Staging
+        run: |
+          echo "::notice::Deploying to staging environment"
+          echo "Deployment would go here — requires SSH/host configuration"
 
-  # deploy-staging:
-  #   runs-on: ubuntu-latest
-  #   needs: docker-build-push
-  #   if: github.ref == 'refs/heads/main'
-  #   environment: staging
-  #   steps:
-  #     - name: Deploy to Staging
-  #       run: echo "Deploying to staging..."
-
-  # deploy-production:
-  #   runs-on: ubuntu-latest
-  #   needs: deploy-staging
-  #   if: github.event_name == 'release'
-  #   environment: production
-  #   steps:
-  #     - name: Deploy to Production
-  #       run: echo "Deploying to production..."
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'release'
+    environment: production
+    steps:
+      - name: Deploy to Production
+        run: |
+          echo "::notice::Deploying to production (triggered by release)"
+          echo "Production deployment would go here"
