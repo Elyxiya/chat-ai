@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { PrismaService } from '../../config/prisma.service';
 import { RedisService } from '../common/redis.service';
 import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/dto/notification.dto';
 import {
   CreateSessionDto,
   SendMessageDto,
@@ -225,6 +226,45 @@ export class ChatService {
 
     if (!member) throw new ForbiddenException('Not a member of this session');
 
+    // Detect @all / @everyone mention
+    const hasAtAll = /\B@(all|everyone)\b/i.test(dto.content);
+    let atAllTargets: string[] = [];
+
+    if (hasAtAll) {
+      const session = await this.prisma.chatSession.findUnique({
+        where: { id: sessionId },
+        select: { sessionType: true },
+      });
+
+      if (session && session.sessionType === 'group') {
+        // Only admins and owner can use @all
+        if (member.role !== 'owner' && member.role !== 'admin') {
+          // Strip @all from content for non-admin users
+          dto.content = dto.content.replace(/\B@(all|everyone)\b/gi, '@all');
+        } else {
+          // Rate limit check via Redis (5-minute cooldown)
+          const rateKey = `atall:${sessionId}:${userId}`;
+          try {
+            const lastUsed = await this.redis.get(rateKey);
+            if (lastUsed) {
+              // Rate limited — still allow but don't trigger notifications
+              this.logger.warn(`@all rate limited for user ${userId} in session ${sessionId}`);
+            } else {
+              await this.redis.set(rateKey, Date.now().toString(), 300); // 5 min TTL
+              // Get all members to notify
+              const allMembers = await this.prisma.chatSessionMember.findMany({
+                where: { sessionId, userId: { not: userId } },
+                select: { userId: true },
+              });
+              atAllTargets = allMembers.map((m) => m.userId);
+            }
+          } catch (err: any) {
+            this.logger.warn(`@all rate check failed: ${err.message}`);
+          }
+        }
+      }
+    }
+
     const message = await this.prisma.message.create({
       data: {
         sessionId,
@@ -244,6 +284,7 @@ export class ChatService {
       data: { updatedAt: new Date() },
     });
 
+    // Create mentions from explicit mention list
     if (dto.mentions?.length) {
       await this.prisma.messageMention.createMany({
         data: dto.mentions.map((userId) => ({
@@ -251,6 +292,37 @@ export class ChatService {
           userId,
         })),
       });
+    }
+
+    // Create mentions for @all targets
+    if (atAllTargets.length > 0) {
+      await this.prisma.messageMention.createMany({
+        data: atAllTargets.map((targetId) => ({
+          messageId: message.id,
+          userId: targetId,
+        })),
+      });
+
+      // Create notifications for @all
+      const sender = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true, nickname: true },
+      });
+      const senderName = sender?.nickname || sender?.username || 'Someone';
+
+      for (const targetId of atAllTargets) {
+        try {
+          await this.notificationService.create({
+            userId: targetId,
+            type: NotificationType.MENTION,
+            title: `@all from ${senderName}`,
+            content: dto.content.slice(0, 100),
+            data: { messageId: message.id, sessionId, mentionedBy: userId, type: 'all' },
+          });
+        } catch (err: any) {
+          this.logger.error(`Failed to send @all notification to ${targetId}: ${err.message}`);
+        }
+      }
     }
 
     return message as unknown as MessageWithSender;
@@ -322,6 +394,80 @@ export class ChatService {
       where: { id: messageId },
       data: { isRecalled: true, recalledAt: new Date(), recalledById: userId },
     });
+  }
+
+  async batchForwardMessages(userId: string, messageIds: string[], targetSessionId: string) {
+    if (!messageIds?.length) throw new NotFoundException('No messages to forward');
+    if (messageIds.length > 50) throw new ForbiddenException('Cannot forward more than 50 messages at once');
+
+    const isMember = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: targetSessionId, userId } },
+    });
+
+    if (!isMember) throw new ForbiddenException('Not a member of target session');
+
+    const messages = await this.prisma.message.findMany({
+      where: { id: { in: messageIds }, isRecalled: false },
+    });
+
+    if (messages.length === 0) throw new NotFoundException('No valid messages to forward');
+
+    const forwarded = await Promise.all(
+      messages.map((msg) =>
+        this.prisma.message.create({
+          data: {
+            sessionId: targetSessionId,
+            senderId: userId,
+            content: msg.content,
+            contentType: msg.contentType,
+            metadata: {
+              ...(msg.metadata as Record<string, any> || {}),
+              forwardedFrom: msg.senderId,
+              forwardedMessageId: msg.id,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            reactions: true,
+          },
+        }),
+      ),
+    );
+
+    await this.prisma.chatSession.update({
+      where: { id: targetSessionId },
+      data: { updatedAt: new Date() },
+    });
+
+    return { forwarded: forwarded.length, total: messageIds.length };
+  }
+
+  async batchDeleteMessages(userId: string, messageIds: string[], deleteType: 'self' | 'everyone') {
+    if (!messageIds?.length) throw new NotFoundException('No messages to delete');
+    if (messageIds.length > 50) throw new ForbiddenException('Cannot delete more than 50 messages at once');
+
+    if (deleteType === 'everyone') {
+      const messages = await this.prisma.message.findMany({
+        where: { id: { in: messageIds }, senderId: userId, isRecalled: false },
+      });
+
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+      for (const msg of messages) {
+        if (msg.createdAt >= fiveMinutesAgo) {
+          await this.prisma.message.update({
+            where: { id: msg.id },
+            data: { isRecalled: true, recalledAt: new Date(), recalledById: userId },
+          });
+        }
+      }
+
+      return { deleted: messages.length, skipped: messageIds.length - messages.length };
+    }
+
+    // "self" mode: no-op on backend, handled by frontend filtering
+    return { deleted: messageIds.length, skipped: 0 };
   }
 
   async markAsRead(userId: string, sessionId: string, _lastMessageId?: string) {
@@ -771,6 +917,118 @@ export class ChatService {
     return this.prisma.message.count({ where });
   }
 
+  async getReadReceipts(userId: string, messageId: string, page: number = 1, limit: number = 50) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: { session: { include: { members: true } } },
+    });
+
+    if (!message) throw new NotFoundException('Message not found');
+
+    const isMember = message.session.members.some((m) => m.userId === userId);
+    if (!isMember) throw new ForbiddenException('Not a member of this session');
+
+    const members = await this.prisma.chatSessionMember.findMany({
+      where: { sessionId: message.sessionId },
+      include: {
+        user: { select: { id: true, username: true, avatarUrl: true, nickname: true, status: true } },
+      },
+    });
+
+    const msgTime = new Date(message.createdAt).getTime();
+    const readUsers = members
+      .filter((m) => m.lastReadAt && new Date(m.lastReadAt).getTime() >= msgTime)
+      .map((m) => ({
+        userId: m.user.id,
+        username: m.user.username,
+        nickname: m.user.nickname,
+        avatarUrl: m.user.avatarUrl,
+        status: m.user.status,
+        readAt: m.lastReadAt!.toISOString(),
+      }))
+      .sort((a, b) => new Date(b.readAt).getTime() - new Date(a.readAt).getTime());
+
+    const unreadUsers = members
+      .filter((m) => !m.lastReadAt || new Date(m.lastReadAt).getTime() < msgTime)
+      .map((m) => ({
+        userId: m.user.id,
+        username: m.user.username,
+        nickname: m.user.nickname,
+        avatarUrl: m.user.avatarUrl,
+        status: m.user.status,
+      }));
+
+    const total = readUsers.length;
+    const start = (page - 1) * limit;
+    const pagedReadUsers = readUsers.slice(start, start + limit);
+
+    return {
+      readCount: total,
+      unreadCount: unreadUsers.length,
+      total: members.length,
+      readUsers: pagedReadUsers,
+      unreadUsers,
+      pagination: { page, limit, total },
+    };
+  }
+
+  async editMessage(userId: string, messageId: string, newContent: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.senderId !== userId) throw new ForbiddenException('Cannot edit others message');
+    if (message.isRecalled) throw new ForbiddenException('Cannot edit a recalled message');
+
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    if (message.createdAt < fifteenMinutesAgo) {
+      throw new ForbiddenException('Cannot edit messages older than 15 minutes');
+    }
+
+    // Save the previous version as an edit history entry
+    await this.prisma.messageEdit.create({
+      data: {
+        messageId,
+        content: message.content,
+      },
+    });
+
+    const updated = await this.prisma.message.update({
+      where: { id: messageId },
+      data: {
+        content: newContent,
+        editCount: { increment: 1 },
+      },
+      include: {
+        sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+        reactions: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async getEditHistory(userId: string, messageId: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: { session: { include: { members: true } } },
+    });
+
+    if (!message) throw new NotFoundException('Message not found');
+
+    const isMember = message.session.members.some((m) => m.userId === userId);
+    if (!isMember) throw new ForbiddenException('Not a member of this session');
+
+    const edits = await this.prisma.messageEdit.findMany({
+      where: { messageId },
+      orderBy: { editedAt: 'desc' },
+      select: { content: true, editedAt: true },
+    });
+
+    return edits;
+  }
+
   async toggleBookmark(userId: string, messageId: string) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
@@ -818,6 +1076,27 @@ export class ChatService {
       bookmarkedAt: b.createdAt,
       message: b.message,
     }));
+  }
+
+  async muteSession(userId: string, sessionId: string, muted: boolean, muteUntil?: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member) throw new ForbiddenException('Not a member of this session');
+
+    const data: any = { muted };
+    if (muteUntil) {
+      data.mutedUntil = new Date(muteUntil);
+    } else if (!muted) {
+      data.mutedUntil = null;
+    }
+
+    await this.prisma.chatSessionMember.update({
+      where: { sessionId_userId: { sessionId, userId } },
+      data,
+    });
+
+    return { muted, mutedUntil: muteUntil || null };
   }
 
   async togglePinSession(userId: string, sessionId: string) {

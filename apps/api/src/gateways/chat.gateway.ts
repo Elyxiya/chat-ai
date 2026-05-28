@@ -200,6 +200,29 @@ export class ChatGateway
     }
   }
 
+  @SubscribeMessage('edit_message')
+  async handleEditMessage(
+    @MessageBody() data: { messageId: string; sessionId: string; content: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    try {
+      const updated = await this.chatGatewayService.editMessage(user.id, data.messageId, data.content);
+      this.server.to(`session:${data.sessionId}`).emit('message_edited', {
+        messageId: data.messageId,
+        sessionId: data.sessionId,
+        content: updated.content,
+        editCount: updated.editCount,
+        editedBy: user.id,
+        updatedAt: updated.updatedAt,
+      });
+    } catch (err: any) {
+      client.emit('error', { message: err.message || 'Failed to edit message' });
+    }
+  }
+
   @SubscribeMessage('reaction')
   async handleReaction(
     @MessageBody() data: { messageId: string; sessionId: string; emoji: string },

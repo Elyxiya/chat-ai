@@ -26,9 +26,11 @@ export default function PrivateChatPage() {
   } = useChatStore();
 
   const [input, setInput] = useState('');
+  const [editInput, setEditInput] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [forwardMsgId, setForwardMsgId] = useState<string | null>(null);
   const [showGroupDetail, setShowGroupDetail] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const session = sessions.find((s) => s.id === sessionId);
   const sessionMessages = useMemo(() => messages[sessionId || ''] || [], [messages, sessionId]);
@@ -123,6 +125,31 @@ export default function PrivateChatPage() {
     } catch { /* ignore */ }
   }, [sessionId, user?.id]);
 
+  const handleEditSubmit = useCallback(async (messageId: string, content: string) => {
+    if (!sessionId || !content.trim()) { setEditingMessage(null); return; }
+    await useChatStore.getState().editMessage(sessionId, messageId, content.trim());
+    setEditingMessage(null);
+  }, [sessionId]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditingMessage(null);
+  }, []);
+
+  const handleEdit = useCallback((msg: ChatMessage) => {
+    setEditInput(msg.content);
+    setEditingMessage(msg);
+  }, []);
+
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (editingMessage) handleEditSubmit(editingMessage.id, editInput);
+    }
+    if (e.key === 'Escape') {
+      handleEditCancel();
+    }
+  }, [editingMessage, editInput, handleEditSubmit, handleEditCancel]);
+
   const bookmarkedIds = useMemo(() => {
     const set = new Set<string>();
     for (const msg of sessionMessages) {
@@ -178,7 +205,56 @@ export default function PrivateChatPage() {
             </svg>
           </button>
         )}
+        {/* Batch mode toggle */}
+        <button
+          onClick={() => useChatStore.getState().toggleBatchMode()}
+          className={`p-2 hover:bg-border rounded-lg transition-colors ${useChatStore.getState().batchMode ? 'text-primary-600 bg-primary-50' : ''}`}
+          title="Select messages"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
       </header>
+
+      {/* Batch toolbar */}
+      {useChatStore.getState().batchMode && (
+        <div className="px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border-b border-border flex items-center gap-3">
+          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+            {useChatStore.getState().selectedMessageIds.size} selected
+          </span>
+          <button
+            onClick={() => {
+              const selectedIds = Array.from(useChatStore.getState().selectedMessageIds);
+              if (selectedIds.length > 0) {
+                setForwardMsgId('batch');
+              }
+            }}
+            disabled={useChatStore.getState().selectedMessageIds.size === 0}
+            className="px-3 py-1 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+          >
+            Forward
+          </button>
+          <button
+            onClick={async () => {
+              const selectedIds = Array.from(useChatStore.getState().selectedMessageIds);
+              if (selectedIds.length === 0) return;
+              await chatApi.batchDeleteMessages(selectedIds, 'everyone');
+              useChatStore.getState().clearSelection();
+            }}
+            disabled={useChatStore.getState().selectedMessageIds.size === 0}
+            className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            Delete
+          </button>
+          <button
+            onClick={() => useChatStore.getState().clearSelection()}
+            className="px-3 py-1 text-sm border border-border rounded-lg hover:bg-border transition-colors ml-auto"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* Messages — virtualized */}
       <VirtualizedMessageList
@@ -187,6 +263,11 @@ export default function PrivateChatPage() {
         onReply={handleReply}
         onForward={handleForward}
         onReaction={handleReaction}
+        onEdit={handleEdit}
+        sessionMembersCount={session?.members?.length || 0}
+        batchMode={useChatStore.getState().batchMode}
+        selectedIds={useChatStore.getState().selectedMessageIds}
+        onToggleSelect={(id) => useChatStore.getState().toggleMessageSelection(id)}
         typingIndicator={
           typingUsersList.length > 0 ? (
             <div className="flex items-center gap-2 text-text-secondary text-sm">
@@ -224,31 +305,67 @@ export default function PrivateChatPage() {
         )}
 
         <div className="p-4 flex items-end gap-2">
-          <FileUploadPanel onUpload={handleFileUpload} />
-          <textarea
-            className="input-field resize-none max-h-32"
-            rows={1}
-            placeholder={replyTo ? 'Reply to message...' : 'Type a message...'}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              handleInputChange(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="btn-primary px-4 py-2 flex-shrink-0"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
+          {editingMessage ? (
+            <>
+              <textarea
+                className="input-field resize-none max-h-32"
+                rows={1}
+                placeholder="Edit message..."
+                value={editInput}
+                onChange={(e) => setEditInput(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                autoFocus
+              />
+              <button
+                onClick={() => handleEditSubmit(editingMessage.id, editInput)}
+                disabled={!editInput.trim()}
+                className="btn-primary px-4 py-2 flex-shrink-0 text-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleEditCancel}
+                className="px-4 py-2 flex-shrink-0 text-sm border border-border rounded-lg hover:bg-border transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <FileUploadPanel onUpload={handleFileUpload} />
+              <textarea
+                className="input-field resize-none max-h-32"
+                rows={1}
+                placeholder={replyTo ? 'Reply to message...' : 'Type a message...'}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  handleInputChange(e.target.value);
+                }}
+                onKeyDown={handleKeyDown}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="btn-primary px-4 py-2 flex-shrink-0"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {forwardMsgId && (
+      {forwardMsgId === 'batch' && (
+        <ForwardModal
+          messageIds={Array.from(useChatStore.getState().selectedMessageIds)}
+          onClose={() => { setForwardMsgId(null); useChatStore.getState().clearSelection(); }}
+          onDone={() => {}}
+        />
+      )}
+      {forwardMsgId && forwardMsgId !== 'batch' && (
         <ForwardModal
           messageId={forwardMsgId}
           onClose={() => setForwardMsgId(null)}

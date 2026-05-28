@@ -50,6 +50,7 @@ export interface ChatMessage {
   recalledAt?: string | null;
   replyToId?: string | null;
   isPinned: boolean;
+  editCount?: number;
   createdAt: string;
   updatedAt: string;
   sender?: Pick<User, 'id' | 'username' | 'avatarUrl' | 'nickname'> | null;

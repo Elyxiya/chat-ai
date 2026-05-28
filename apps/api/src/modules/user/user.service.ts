@@ -32,6 +32,18 @@ export class UserService {
     return user;
   }
 
+  async updateStatus(userId: string, status: string) {
+    const validStatuses = ['online', 'offline', 'away', 'busy', 'invisible'];
+    if (!validStatuses.includes(status)) {
+      throw new Error('Invalid status. Must be one of: ' + validStatuses.join(', '));
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { status },
+      select: { id: true, username: true, status: true },
+    });
+  }
+
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     return this.prisma.user.update({
       where: { id: userId },

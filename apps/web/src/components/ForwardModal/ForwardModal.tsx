@@ -3,12 +3,13 @@ import { useChatStore } from '@/stores/chat.store';
 import { chatApi } from '@/api/client';
 
 interface ForwardModalProps {
-  messageId: string;
+  messageId?: string;
+  messageIds?: string[];
   onClose: () => void;
   onDone: () => void;
 }
 
-export default function ForwardModal({ messageId, onClose, onDone }: ForwardModalProps) {
+export default function ForwardModal({ messageId, messageIds, onClose, onDone }: ForwardModalProps) {
   const { sessions } = useChatStore();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -37,7 +38,11 @@ export default function ForwardModal({ messageId, onClose, onDone }: ForwardModa
     if (selected.size === 0) return;
     setSending(true);
     try {
-      await chatApi.forwardMessage(messageId, Array.from(selected));
+      if (messageIds && messageIds.length > 0) {
+        await chatApi.batchForwardMessages(messageIds, Array.from(selected)[0]);
+      } else if (messageId) {
+        await chatApi.forwardMessage(messageId, Array.from(selected));
+      }
       onDone();
       onClose();
     } catch {

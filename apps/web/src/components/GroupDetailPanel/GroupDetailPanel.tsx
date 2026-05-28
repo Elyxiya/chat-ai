@@ -17,6 +17,7 @@ export default function GroupDetailPanel({ session, isOpen, onClose }: GroupDeta
   const [announcementText, setAnnouncementText] = useState(session?.announcement || '');
   const [inviteCode, setInviteCode] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [muted, setMuted] = useState(session?.muted || false);
 
   const isAdmin = session?.members?.some(
     (m: any) => m.user.id === user?.id && (m.role === 'owner' || m.role === 'admin')
@@ -67,6 +68,13 @@ export default function GroupDetailPanel({ session, isOpen, onClose }: GroupDeta
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
     }
+  };
+
+  const handleToggleMute = async () => {
+    try {
+      await chatApi.muteSession(session.id, !muted);
+      setMuted(!muted);
+    } catch { /* ignore */ }
   };
 
   if (!isOpen) return null;
@@ -160,6 +168,26 @@ export default function GroupDetailPanel({ session, isOpen, onClose }: GroupDeta
             ) : (
               <p className="text-sm text-text-secondary">Ask an admin for an invite link</p>
             )}
+          </div>
+
+          {/* Mute */}
+          <div>
+            <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+              Notifications
+            </h4>
+            <button
+              onClick={handleToggleMute}
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg hover:bg-border/50 transition-colors"
+            >
+              <span className="text-sm">{muted ? 'Muted' : 'Mute this chat'}</span>
+              <div className={`w-10 h-5 rounded-full transition-colors ${muted ? 'bg-red-400' : 'bg-gray-300'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow-sm mt-0.5 transition-transform ${muted ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </div>
+            </button>
           </div>
 
           {/* Members */}

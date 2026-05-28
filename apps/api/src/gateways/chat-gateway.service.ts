@@ -110,6 +110,32 @@ export class ChatGatewayService {
     });
   }
 
+  async editMessage(userId: string, messageId: string, newContent: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) throw new Error('Message not found');
+    if (message.senderId !== userId) throw new Error('Cannot edit others message');
+
+    // Save edit history
+    await this.prisma.messageEdit.create({
+      data: { messageId, content: message.content },
+    });
+
+    return this.prisma.message.update({
+      where: { id: messageId },
+      data: {
+        content: newContent,
+        editCount: { increment: 1 },
+      },
+      include: {
+        sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+        reactions: true,
+      },
+    });
+  }
+
   async markRead(userId: string, sessionId: string, _lastMessageId: string) {
     await this.prisma.chatSessionMember.update({
       where: { sessionId_userId: { sessionId, userId } },

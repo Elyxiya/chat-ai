@@ -152,7 +152,8 @@ export default function NotificationPanel() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleFriendAction(notification.data.requesterId, 'accept', notification.id);
+                              const id = notification.data!.requesterId;
+                              handleFriendAction(id, 'accept', notification.id);
                             }}
                             disabled={friendActionLoading === notification.id}
                             className="px-2.5 py-1 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
@@ -162,7 +163,8 @@ export default function NotificationPanel() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleFriendAction(notification.data.requesterId, 'reject', notification.id);
+                              const id = notification.data!.requesterId;
+                              handleFriendAction(id, 'reject', notification.id);
                             }}
                             disabled={friendActionLoading === notification.id}
                             className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"

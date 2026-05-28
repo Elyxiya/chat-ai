@@ -32,6 +32,14 @@ export class UserController {
     return success(await this.userService.updateProfile(currentUserId, dto));
   }
 
+  @Patch('status')
+  async updateStatus(
+    @CurrentUser('id') userId: string,
+    @Body() body: { status: string },
+  ) {
+    return success(await this.userService.updateStatus(userId, body.status));
+  }
+
   @Post('avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {

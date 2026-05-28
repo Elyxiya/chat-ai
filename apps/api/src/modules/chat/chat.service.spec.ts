@@ -3,6 +3,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { RedisService } from '../common/redis.service';
 import { PrismaService } from '../../config/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { makeSession, makeMessage, makeSessionMember, makeUser, makeFriendship } from '../../test/factories/entities.factory';
 
 describe('ChatService', () => {
@@ -33,6 +34,10 @@ describe('ChatService', () => {
         update: jest.fn(),
         count: jest.fn(),
       },
+      messageEdit: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
       friendship: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -44,6 +49,20 @@ describe('ChatService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         delete: jest.fn(),
+      },
+      messageMention: {
+        createMany: jest.fn(),
+      },
+      bookmark: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        delete: jest.fn(),
+        findMany: jest.fn(),
+      },
+      notification: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        findMany: jest.fn(),
       },
       user: {
         findMany: jest.fn(),
@@ -59,11 +78,18 @@ describe('ChatService', () => {
       scan: jest.fn(),
     };
 
+    const mockNotificationService = {
+      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      createMention: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      createFriendRequest: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RedisService, useValue: mockRedis },
+        { provide: NotificationService, useValue: mockNotificationService },
       ],
     }).compile();
 

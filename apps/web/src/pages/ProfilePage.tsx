@@ -27,6 +27,16 @@ export default function ProfilePage() {
     if (user?.bio) setBio(user.bio);
   }, [user]);
 
+  const [status, setStatus] = useState<string>(user?.status || 'online');
+
+  const handleStatusChange = async (newStatus: string) => {
+    setStatus(newStatus);
+    try {
+      await userApi.updateStatus(newStatus);
+      if (user) setUser({ ...user, status: newStatus as any });
+    } catch { setStatus(user?.status ?? 'online'); }
+  };
+
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
@@ -124,6 +134,32 @@ export default function ProfilePage() {
             <button onClick={handleAvatarSelect} className="text-sm text-primary-600 hover:underline" disabled={uploading}>
               {uploading ? 'Uploading...' : 'Change avatar'}
             </button>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Status</h3>
+            <div className="flex gap-2">
+              {[
+                { value: 'online', label: 'Online', color: 'bg-green-500' },
+                { value: 'away', label: 'Away', color: 'bg-yellow-500' },
+                { value: 'busy', label: 'Busy', color: 'bg-red-500' },
+                { value: 'invisible', label: 'Invisible', color: 'bg-gray-400' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleStatusChange(opt.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                    status === opt.value
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700'
+                      : 'border-border hover:bg-border/50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${opt.color}`} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Profile Info */}

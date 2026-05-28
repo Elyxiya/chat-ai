@@ -177,6 +177,24 @@ export class ChatController {
     return success(null);
   }
 
+  @Post('messages/batch/forward')
+  @ApiOperation({ summary: 'Batch forward messages to another session' })
+  async batchForwardMessages(
+    @CurrentUser('id') userId: string,
+    @Body() body: { messageIds: string[]; targetSessionId: string },
+  ) {
+    return success(await this.chatService.batchForwardMessages(userId, body.messageIds, body.targetSessionId));
+  }
+
+  @Post('messages/batch/delete')
+  @ApiOperation({ summary: 'Batch delete messages (self or everyone)' })
+  async batchDeleteMessages(
+    @CurrentUser('id') userId: string,
+    @Body() body: { messageIds: string[]; type: 'self' | 'everyone' },
+  ) {
+    return success(await this.chatService.batchDeleteMessages(userId, body.messageIds, body.type));
+  }
+
   @Post('messages/forward')
   @ApiOperation({ summary: 'Forward a message to other sessions' })
   async forwardMessage(
@@ -264,6 +282,36 @@ export class ChatController {
     return success(await this.chatService.getOnlineUsers());
   }
 
+  @Patch('messages/:id')
+  @ApiOperation({ summary: 'Edit a message' })
+  async editMessage(
+    @CurrentUser('id') userId: string,
+    @Param('id') messageId: string,
+    @Body() body: { content: string },
+  ) {
+    return success(await this.chatService.editMessage(userId, messageId, body.content));
+  }
+
+  @Get('messages/:id/edit-history')
+  @ApiOperation({ summary: 'Get edit history of a message' })
+  async getEditHistory(
+    @CurrentUser('id') userId: string,
+    @Param('id') messageId: string,
+  ) {
+    return success(await this.chatService.getEditHistory(userId, messageId));
+  }
+
+  @Get('messages/:id/read-receipts')
+  @ApiOperation({ summary: 'Get read receipts for a message' })
+  async getReadReceipts(
+    @CurrentUser('id') userId: string,
+    @Param('id') messageId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return success(await this.chatService.getReadReceipts(userId, messageId, page || 1, limit || 50));
+  }
+
   @Post('messages/:id/bookmark')
   @ApiOperation({ summary: 'Toggle bookmark on a message' })
   async toggleBookmark(
@@ -280,6 +328,16 @@ export class ChatController {
     @Query('limit') limit?: string,
   ) {
     return success(await this.chatService.getBookmarks(userId, limit ? Number(limit) : 50));
+  }
+
+  @Patch('sessions/:sessionId/mute')
+  @ApiOperation({ summary: 'Mute or unmute a session' })
+  async muteSession(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { muted: boolean; muteUntil?: string },
+  ) {
+    return success(await this.chatService.muteSession(userId, sessionId, body.muted, body.muteUntil));
   }
 
   @Patch('sessions/:sessionId/pin')

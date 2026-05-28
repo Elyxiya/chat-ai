@@ -28,7 +28,15 @@ interface ChatState {
   joinSession: (sessionId: string) => void;
   leaveSession: (sessionId: string) => void;
   createSession: (data: { sessionType: string; name?: string; memberIds?: string[] }) => Promise<string>;
+  editMessage: (sessionId: string, messageId: string, content: string) => Promise<void>;
   addMessageReaction: (sessionId: string, messageId: string, reaction: { id: string; emoji: string; userId: string; messageId: string; createdAt: string }) => void;
+
+  // Batch selection
+  batchMode: boolean;
+  selectedMessageIds: Set<string>;
+  toggleBatchMode: () => void;
+  toggleMessageSelection: (messageId: string) => void;
+  clearSelection: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -39,6 +47,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingUsers: {},
   isLoading: false,
   socket: null,
+  batchMode: false,
+  selectedMessageIds: new Set<string>(),
 
   connect: (token) => {
     const socket = io(`${WS_URL}/chat`, {
@@ -139,6 +149,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     });
 
+    socket.on('message_edited', ({ messageId, sessionId, content, editCount }: { messageId: string; sessionId: string; content: string; editCount: number }) => {
+      set((state) => {
+        const msgs = state.messages[sessionId];
+        if (!msgs) return state;
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: msgs.map((m) =>
+              m.id === messageId ? { ...m, content, editCount } : m,
+            ),
+          },
+        };
+      });
+    });
+
     socket.on('notification', (notification: any) => {
       useNotificationStore.getState().addNotification(notification);
     });
@@ -226,6 +251,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     chatApi.markRead(sessionId, msgs[msgs.length - 1].id).catch(() => {});
   },
 
+  editMessage: async (sessionId, messageId, content) => {
+    const { socket } = get();
+    if (socket?.connected) {
+      socket.emit('edit_message', { messageId, sessionId, content });
+    } else {
+      await chatApi.editMessage(messageId, content);
+      const updated = await chatApi.editMessage(messageId, content);
+      set((state) => {
+        const msgs = state.messages[sessionId];
+        if (!msgs) return state;
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: msgs.map((m) =>
+              m.id === messageId ? { ...m, content, editCount: (m.editCount || 0) + 1 } : m,
+            ),
+          },
+        };
+      });
+    }
+  },
+
   joinSession: (sessionId) => {
     const { socket } = get();
     socket?.emit('join_session', { sessionId });
@@ -258,5 +305,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     });
+  },
+
+  // Batch selection
+  toggleBatchMode: () => {
+    set((state) => ({
+      batchMode: !state.batchMode,
+      selectedMessageIds: new Set<string>(),
+    }));
+  },
+
+  toggleMessageSelection: (messageId) => {
+    set((state) => {
+      const newSet = new Set(state.selectedMessageIds);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return { selectedMessageIds: newSet };
+    });
+  },
+
+  clearSelection: () => {
+    set({ selectedMessageIds: new Set<string>(), batchMode: false });
   },
 }));

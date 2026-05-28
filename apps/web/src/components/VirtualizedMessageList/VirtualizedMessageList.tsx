@@ -11,7 +11,12 @@ interface VirtualizedMessageListProps {
   onForward?: (messageId: string) => void;
   onBookmark?: (messageId: string) => void;
   onReaction?: (messageId: string, emoji: string) => void;
+  onEdit?: (msg: ChatMessage) => void;
   bookmarkedIds?: Set<string>;
+  sessionMembersCount?: number;
+  batchMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (messageId: string) => void;
 }
 
 const ROW_ESTIMATED_SIZE = 120;
@@ -26,7 +31,7 @@ function getItemHeight(message: ChatMessage): number {
   return Math.max(110, lines * 24 + 80);
 }
 
-export default function VirtualizedMessageList({ messages, userId, typingIndicator, onReply, onForward, onBookmark, onReaction, bookmarkedIds }: VirtualizedMessageListProps) {
+export default function VirtualizedMessageList({ messages, userId, typingIndicator, onReply, onForward, onBookmark, onReaction, onEdit, bookmarkedIds, sessionMembersCount, batchMode, selectedIds, onToggleSelect }: VirtualizedMessageListProps) {
   const listRef = useRef<List>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(0);
@@ -96,20 +101,39 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
 
   const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const msg = messages[index];
+    const isSelected = selectedIds?.has(msg.id);
     return (
-      <div style={style} className="px-5">
-        <MessageBubble
-          message={msg}
-          isOwn={msg.senderId === userId}
-          onReply={onReply ? () => onReply(msg) : undefined}
-          onForward={onForward ? () => onForward(msg.id) : undefined}
-          onBookmark={onBookmark ? () => onBookmark(msg.id) : undefined}
-          onReaction={onReaction ? (emoji) => onReaction(msg.id, emoji) : undefined}
-          bookmarked={bookmarkedIds?.has(msg.id)}
-        />
+      <div
+        style={style}
+        className={`px-5 flex items-start gap-2 ${batchMode ? 'cursor-pointer' : ''}`}
+        onClick={batchMode && onToggleSelect ? () => onToggleSelect(msg.id) : undefined}
+      >
+        {batchMode && (
+          <div className="flex-shrink-0 pt-4">
+            <input
+              type="checkbox"
+              checked={!!isSelected}
+              readOnly
+              className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500"
+            />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <MessageBubble
+            message={msg}
+            isOwn={msg.senderId === userId}
+            onReply={batchMode ? undefined : (onReply ? () => onReply(msg) : undefined)}
+            onForward={batchMode ? undefined : (onForward ? () => onForward(msg.id) : undefined)}
+            onBookmark={batchMode ? undefined : (onBookmark ? () => onBookmark(msg.id) : undefined)}
+            onReaction={batchMode ? undefined : (onReaction ? (emoji) => onReaction(msg.id, emoji) : undefined)}
+            onEdit={batchMode ? undefined : (onEdit ? () => onEdit(msg) : undefined)}
+            bookmarked={bookmarkedIds?.has(msg.id)}
+            sessionMembersCount={sessionMembersCount}
+          />
+        </div>
       </div>
     );
-  }, [messages, userId, onReply, onForward, onBookmark, onReaction, bookmarkedIds]);
+  }, [messages, userId, onReply, onForward, onBookmark, onReaction, onEdit, bookmarkedIds, sessionMembersCount, batchMode, selectedIds, onToggleSelect]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">

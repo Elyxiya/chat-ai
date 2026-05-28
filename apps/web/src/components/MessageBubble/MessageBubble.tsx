@@ -4,6 +4,7 @@ import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
 import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
 import LazyImage from '../LazyImage/LazyImage';
+import ReadReceiptPanel from '../ReadReceiptPanel/ReadReceiptPanel';
 
 const md = new MarkdownIt({
   html: false,
@@ -26,12 +27,15 @@ interface MessageBubbleProps {
   onReply?: () => void;
   onForward?: () => void;
   onBookmark?: () => void;
+  onEdit?: () => void;
   bookmarked?: boolean;
+  sessionMembersCount?: number;
 }
 
-export default function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, bookmarked }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, onEdit, bookmarked, sessionMembersCount }: MessageBubbleProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  const [showReadReceipts, setShowReadReceipts] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -109,7 +113,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
       return <StreamingMarkdown text={message.content} />;
     }
 
-    return <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>;
+    return <p className="text-sm whitespace-pre-wrap break-words">{renderContentWithMentions(message.content)}</p>;
   }, [message]);
 
   return (
@@ -151,7 +155,16 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
         <div className={`flex items-center gap-2 mt-1 px-1 ${isOwn ? 'justify-end' : ''}`}>
           <span className="text-xs text-text-secondary">
             {format(new Date(message.createdAt), 'HH:mm')}
+            {message.editCount && message.editCount > 0 ? ' · edited' : ''}
           </span>
+          {isOwn && sessionMembersCount && sessionMembersCount > 2 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowReadReceipts(true); }}
+              className="text-xs text-text-secondary hover:text-primary-600 transition-colors"
+            >
+              Read
+            </button>
+          )}
           {message.reactions && message.reactions.length > 0 && (
             <div className="flex items-center gap-1">
               {message.reactions.map((r) => (
@@ -198,6 +211,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
             >
               <span>{bookmarked ? 'Remove Bookmark' : 'Bookmark'}</span>
             </button>
+            {isOwn && onEdit && (
+              <button
+                onClick={() => { if (onEdit) { onEdit(); } setShowMenu(false); }}
+                className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
+              >
+                <span>Edit</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -217,6 +238,13 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
         )}
       </div>
 
+      {showReadReceipts && (
+        <ReadReceiptPanel
+          messageId={message.id}
+          isOpen={showReadReceipts}
+          onClose={() => setShowReadReceipts(false)}
+        />
+      )}
       {previewSrc && (
         <FilePreviewModal
           src={previewSrc}
@@ -227,6 +255,17 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
         />
       )}
     </div>
+  );
+}
+
+function renderContentWithMentions(content: string): React.ReactNode {
+  // Split by @all and @everyone mentions and wrap them in highlighted spans
+  const parts = content.split(/(\B@(?:all|everyone)\b)/gi);
+  if (parts.length === 1) return content;
+  return parts.map((part, i) =>
+    /^\B@(all|everyone)\b$/i.test(part)
+      ? <span key={i} className="inline-block px-1.5 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs font-semibold">{part}</span>
+      : part,
   );
 }
 

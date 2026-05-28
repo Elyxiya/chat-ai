@@ -144,6 +144,8 @@ model ChatSessionMember {
   joinedAt   DateTime  @default(now()) @map("joined_at")
   lastReadAt DateTime? @map("last_read_at")
   pinnedAt   DateTime? @map("pinned_at")
+  muted      Boolean   @default(false)
+  mutedUntil DateTime? @map("muted_until")
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -164,6 +166,7 @@ model Message {
   recalledById String?   @map("recalled_by_id")
   replyToId    String?   @map("reply_to_id")
   isPinned     Boolean   @default(false) @map("is_pinned")
+  editCount    Int       @default(0) @map("edit_count")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
@@ -175,6 +178,7 @@ model Message {
   reactions  MessageReaction[]
   mentions   MessageMention[]
   bookmarks  Bookmark[]
+  edits      MessageEdit[]
 
   @@index([sessionId, createdAt(sort: Desc)])
   @@index([senderId])
@@ -391,6 +395,18 @@ model AuditLog {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("audit_logs")
+}
+
+model MessageEdit {
+  id        String    @id @default(uuid())
+  messageId String    @map("message_id")
+  content   String    @db.Text
+  editedAt  DateTime  @default(now()) @map("edited_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_edits")
 }
 
 model SystemSetting {

@@ -44,6 +44,20 @@ export class NotificationService {
   }
 
   async createMention(sessionId: string, mentionedUserId: string, senderName: string, content: string) {
+    // Check if the user has muted this session
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId: mentionedUserId } },
+      select: { muted: true, mutedUntil: true },
+    });
+
+    if (member?.muted) {
+      if (member.mutedUntil && member.mutedUntil < new Date()) {
+        // Mute expired — proceed normally
+      } else {
+        return null; // Session is muted, skip notification
+      }
+    }
+
     return this.create({
       userId: mentionedUserId,
       type: NotificationType.MENTION,

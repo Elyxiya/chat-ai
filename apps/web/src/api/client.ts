@@ -106,6 +106,10 @@ export const chatApi = {
     apiClient.get('/chat/search', { params }),
   forwardMessage: (messageId: string, targetSessionIds: string[]) =>
     apiClient.post('/chat/messages/forward', { messageId, targetSessionIds }),
+  batchForwardMessages: (messageIds: string[], targetSessionId: string) =>
+    apiClient.post('/chat/messages/batch/forward', { messageIds, targetSessionId }),
+  batchDeleteMessages: (messageIds: string[], type: 'self' | 'everyone') =>
+    apiClient.post('/chat/messages/batch/delete', { messageIds, type }),
   getSessionMembers: (sessionId: string) =>
     apiClient.get(`/chat/sessions/${sessionId}/members`),
   setAnnouncement: (sessionId: string, content: string) =>
@@ -122,6 +126,14 @@ export const chatApi = {
     apiClient.get('/chat/bookmarks', { params: { limit } }),
   togglePinSession: (sessionId: string) =>
     apiClient.patch(`/chat/sessions/${sessionId}/pin`),
+  muteSession: (sessionId: string, muted: boolean, muteUntil?: string) =>
+    apiClient.patch(`/chat/sessions/${sessionId}/mute`, { muted, muteUntil }),
+  getReadReceipts: (messageId: string, page?: number, limit?: number) =>
+    apiClient.get(`/chat/messages/${messageId}/read-receipts`, { params: { page, limit } }),
+  editMessage: (messageId: string, content: string) =>
+    apiClient.patch(`/chat/messages/${messageId}`, { content }),
+  getEditHistory: (messageId: string) =>
+    apiClient.get(`/chat/messages/${messageId}/edit-history`),
   addReaction: (messageId: string, emoji: string) =>
     apiClient.post('/chat/reactions', { messageId, emoji }),
   removeReaction: (messageId: string, emoji: string) =>
@@ -142,6 +154,8 @@ export const userApi = {
   getProfile: (userId: string) => apiClient.get(`/users/${userId}`),
   updateProfile: (data: { nickname?: string; bio?: string; avatarUrl?: string }) =>
     apiClient.patch('/users/profile', data),
+  updateStatus: (status: string) =>
+    apiClient.patch('/users/status', { status }),
   uploadAvatar: (file: File) => {
     const form = new FormData();
     form.append('avatar', file);
