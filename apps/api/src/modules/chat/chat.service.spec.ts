@@ -16,6 +16,7 @@ describe('ChatService', () => {
       chatSessionMember: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        create: jest.fn(),
         createMany: jest.fn(),
         delete: jest.fn(),
         update: jest.fn(),
@@ -867,6 +868,259 @@ describe('ChatService', () => {
       const result = await service.addReaction('user-1', 'msg-1', '👍');
 
       expect(result.emoji).toBe('👍');
+    });
+  });
+
+  describe('getReadReceipts', () => {
+    it('S5-READ-01: should return read and unread users', async () => {
+      const message = makeMessage({ id: 'msg-1', createdAt: new Date(Date.now() - 60000) });
+      message.session = { id: 'session-1', members: [{ userId: 'user-1' }, { userId: 'user-2' }, { userId: 'user-3' }] };
+      mockPrisma.message.findUnique.mockResolvedValue(message);
+
+      const members = [
+        { id: 'm1', userId: 'user-1', role: 'owner', lastReadAt: new Date() },
+        { id: 'm2', userId: 'user-2', role: 'member', lastReadAt: new Date(Date.now() - 30000) },
+        { id: 'm3', userId: 'user-3', role: 'member', lastReadAt: null },
+      ].map((m) => ({
+        ...m,
+        sessionId: 'session-1',
+        nickname: null,
+        joinedAt: new Date(),
+        pinnedAt: null,
+        muted: false,
+        mutedUntil: null,
+        user: { id: m.userId, username: `user${m.userId.slice(-1)}`, avatarUrl: null, nickname: null, status: 'online' },
+      }));
+      mockPrisma.chatSessionMember.findMany.mockResolvedValue(members);
+
+      const result = await service.getReadReceipts('user-1', 'msg-1');
+
+      expect(result.readCount).toBe(2);
+      expect(result.unreadCount).toBe(1);
+      expect(result.total).toBe(3);
+      expect(result.readUsers).toHaveLength(2);
+      expect(result.unreadUsers).toHaveLength(1);
+    });
+
+    it('S5-READ-02: should throw ForbiddenException for non-member', async () => {
+      const message = makeMessage({ id: 'msg-1' });
+      message.session = { id: 'session-1', members: [{ userId: 'user-2' }] };
+      mockPrisma.message.findUnique.mockResolvedValue(message);
+
+      await expect(service.getReadReceipts('user-1', 'msg-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('S5-READ-03: should return empty read list when no one has read', async () => {
+      const message = makeMessage({ id: 'msg-1', createdAt: new Date() });
+      message.session = { id: 'session-1', members: [{ userId: 'user-1' }, { userId: 'user-2' }] };
+      mockPrisma.message.findUnique.mockResolvedValue(message);
+
+      const members = [
+        { userId: 'user-1', role: 'owner', lastReadAt: null },
+        { userId: 'user-2', role: 'member', lastReadAt: null },
+      ].map((m) => ({
+        id: `m-${m.userId}`,
+        sessionId: 'session-1',
+        ...m,
+        nickname: null,
+        joinedAt: new Date(),
+        pinnedAt: null,
+        muted: false,
+        mutedUntil: null,
+        user: { id: m.userId, username: `user${m.userId.slice(-1)}`, avatarUrl: null, nickname: null, status: 'offline' },
+      }));
+      mockPrisma.chatSessionMember.findMany.mockResolvedValue(members);
+
+      const result = await service.getReadReceipts('user-1', 'msg-1');
+
+      expect(result.readCount).toBe(0);
+      expect(result.unreadCount).toBe(2);
+    });
+  });
+
+  describe('editMessage', () => {
+    it('S5-EDIT-01: should edit message within 15 minutes', async () => {
+      const msg = makeMessage({ id: 'msg-1', senderId: 'user-1', content: 'Original', createdAt: new Date() });
+      mockPrisma.message.findUnique.mockResolvedValue(msg);
+      mockPrisma.messageEdit.create.mockResolvedValue({});
+      mockPrisma.message.update.mockResolvedValue({ ...msg, content: 'Edited', editCount: 1 });
+
+      const result = await service.editMessage('user-1', 'msg-1', 'Edited');
+
+      expect(mockPrisma.messageEdit.create).toHaveBeenCalledWith({
+        data: { messageId: 'msg-1', content: 'Original' },
+      });
+      expect(result.content).toBe('Edited');
+    });
+
+    it('S5-EDIT-02: should throw ForbiddenException for message older than 15 minutes', async () => {
+      const oldDate = new Date(Date.now() - 20 * 60 * 1000);
+      const msg = makeMessage({ id: 'msg-1', senderId: 'user-1', createdAt: oldDate });
+      mockPrisma.message.findUnique.mockResolvedValue(msg);
+
+      await expect(service.editMessage('user-1', 'msg-1', 'Edited')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('S5-EDIT-03: should throw ForbiddenException when editing others message', async () => {
+      const msg = makeMessage({ id: 'msg-1', senderId: 'user-2', createdAt: new Date() });
+      mockPrisma.message.findUnique.mockResolvedValue(msg);
+
+      await expect(service.editMessage('user-1', 'msg-1', 'Edited')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('S5-EDIT-04: should throw ForbiddenException when editing recalled message', async () => {
+      const msg = makeMessage({ id: 'msg-1', senderId: 'user-1', isRecalled: true, createdAt: new Date() });
+      mockPrisma.message.findUnique.mockResolvedValue(msg);
+
+      await expect(service.editMessage('user-1', 'msg-1', 'Edited')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('batchForwardMessages', () => {
+    it('S5-BATCH-01: should forward multiple messages', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ sessionId: 'target-1', userId: 'user-1', role: 'member' });
+      mockPrisma.message.findMany.mockResolvedValue([
+        makeMessage({ id: 'msg-1', content: 'Hello' }),
+        makeMessage({ id: 'msg-2', content: 'World' }),
+      ]);
+      mockPrisma.message.create.mockResolvedValue(makeMessage({}));
+      mockPrisma.chatSession.update.mockResolvedValue({});
+
+      const result = await service.batchForwardMessages('user-1', ['msg-1', 'msg-2'], 'target-1');
+
+      expect(result.forwarded).toBe(2);
+      expect(mockPrisma.message.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('S5-BATCH-02: should throw when not a member of target session', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.batchForwardMessages('user-1', ['msg-1'], 'target-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('S5-BATCH-03: should throw when forwarding more than 50 messages', async () => {
+      const ids = Array.from({ length: 51 }, (_, i) => `msg-${i}`);
+
+      await expect(
+        service.batchForwardMessages('user-1', ids, 'target-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('muteSession', () => {
+    it('S5-MUTE-01: should mute a session', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', sessionId: 'session-1', role: 'member' });
+      mockPrisma.chatSessionMember.update.mockResolvedValue({});
+
+      const result = await service.muteSession('user-1', 'session-1', true);
+
+      expect(result.muted).toBe(true);
+      expect(mockPrisma.chatSessionMember.update).toHaveBeenCalledWith({
+        where: { sessionId_userId: { sessionId: 'session-1', userId: 'user-1' } },
+        data: { muted: true },
+      });
+    });
+
+    it('S5-MUTE-02: should unmute a session', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', sessionId: 'session-1', role: 'member' });
+      mockPrisma.chatSessionMember.update.mockResolvedValue({});
+
+      const result = await service.muteSession('user-1', 'session-1', false);
+
+      expect(result.muted).toBe(false);
+    });
+
+    it('S5-MUTE-03: should throw ForbiddenException for non-member', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+
+      await expect(service.muteSession('user-1', 'session-1', true)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('createChannel', () => {
+    it('S6-CHAN-01: should create a channel', async () => {
+      mockPrisma.chatSession.create.mockResolvedValue(makeSession({
+        id: 'channel-1',
+        sessionType: 'channel',
+        name: 'Announcements',
+      }));
+
+      const result = await service.createChannel('user-1', { name: 'Announcements' });
+
+      expect(mockPrisma.chatSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionType: 'channel',
+            name: 'Announcements',
+            whoCanPost: 'admin',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('subscribeChannel', () => {
+    it('S6-CHAN-02: should subscribe to a channel', async () => {
+      mockPrisma.chatSession.findUnique.mockResolvedValue({
+        sessionType: 'channel',
+        maxMembers: 500,
+        _count: { members: 10 },
+      });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+      mockPrisma.chatSessionMember.create.mockResolvedValue({});
+
+      const result = await service.subscribeChannel('user-1', 'channel-1');
+
+      expect(result.subscribed).toBe(true);
+      expect(result.alreadyMember).toBe(false);
+    });
+
+    it('S6-CHAN-03: should return already subscribed if already a member', async () => {
+      mockPrisma.chatSession.findUnique.mockResolvedValue({
+        sessionType: 'channel',
+        maxMembers: 500,
+        _count: { members: 10 },
+      });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', role: 'member' });
+
+      const result = await service.subscribeChannel('user-1', 'channel-1');
+
+      expect(result.alreadyMember).toBe(true);
+    });
+
+    it('S6-CHAN-04: should throw when channel is full', async () => {
+      mockPrisma.chatSession.findUnique.mockResolvedValue({
+        sessionType: 'channel',
+        maxMembers: 10,
+        _count: { members: 10 },
+      });
+
+      await expect(service.subscribeChannel('user-1', 'channel-1')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('unsubscribeChannel', () => {
+    it('S6-CHAN-05: should unsubscribe from a channel', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', sessionId: 'channel-1', role: 'member' });
+      mockPrisma.chatSessionMember.delete.mockResolvedValue({});
+
+      const result = await service.unsubscribeChannel('user-1', 'channel-1');
+
+      expect(result.unsubscribed).toBe(true);
+    });
+
+    it('S6-CHAN-06: should throw ForbiddenException for owner trying to unsubscribe', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', sessionId: 'channel-1', role: 'owner' });
+
+      await expect(service.unsubscribeChannel('user-1', 'channel-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('S6-CHAN-07: should throw NotFoundException when not subscribed', async () => {
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
+
+      await expect(service.unsubscribeChannel('user-1', 'channel-1')).rejects.toThrow(NotFoundException);
     });
   });
 });
