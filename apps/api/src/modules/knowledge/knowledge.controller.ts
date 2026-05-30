@@ -13,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiOperation } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
+import { FileParserService } from './file-parser.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateKbDto, SearchKbDto } from './dto/knowledge.dto';
@@ -23,7 +24,10 @@ import { success } from '../common/result';
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'knowledge', version: '1' })
 export class KnowledgeController {
-  constructor(private readonly knowledgeService: KnowledgeService) {}
+  constructor(
+    private readonly knowledgeService: KnowledgeService,
+    private readonly fileParser: FileParserService,
+  ) {}
 
   @Get('bases')
   @ApiOperation({ summary: 'List all knowledge bases' })
@@ -59,12 +63,15 @@ export class KnowledgeController {
     @Param('kbId') kbId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    // Parse file content based on format (txt, md, pdf, etc.)
+    const parsed = this.fileParser.parse(file);
+
     return success(
       await this.knowledgeService.addDocument(userId, kbId, {
-        fileName: file.originalname,
-        fileSize: file.size,
-        mimeType: file.mimetype,
-        content: file.buffer.toString('utf-8'),
+        fileName: parsed.fileName,
+        fileSize: parsed.fileSize,
+        mimeType: parsed.fileType,
+        content: parsed.content,
       }),
     );
   }
@@ -85,6 +92,15 @@ export class KnowledgeController {
   @ApiOperation({ summary: 'List documents in knowledge base' })
   async listDocuments(@Param('kbId') kbId: string) {
     return success(await this.knowledgeService.listDocuments(kbId));
+  }
+
+  @Get('bases/:kbId/documents/:docId/chunks')
+  @ApiOperation({ summary: 'Get chunks for a document' })
+  async getDocumentChunks(
+    @Param('kbId') kbId: string,
+    @Param('docId') docId: string,
+  ) {
+    return success(await this.knowledgeService.getDocumentChunks(kbId, docId));
   }
 
   @Delete('bases/:kbId/documents/:docId')

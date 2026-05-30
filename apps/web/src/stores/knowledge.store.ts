@@ -1,25 +1,43 @@
 import { create } from 'zustand';
-import { KnowledgeBase } from '@/types';
+import { KnowledgeBase, KnowledgeDocument } from '@/types';
 import { useAuthStore } from './auth.store';
+
+interface DocumentChunk {
+  id: string;
+  content: string;
+  chunk_index: number;
+}
 
 interface KnowledgeState {
   bases: KnowledgeBase[];
   currentBase: KnowledgeBase | null;
+  documents: KnowledgeDocument[];
+  documentsLoading: boolean;
+  documentChunks: Record<string, DocumentChunk[]>;
+  chunksLoading: string | null;  // document ID being loaded
   searchQuery: string;
   searchResults: any[];
   isSearching: boolean;
   fetchBases: () => Promise<void>;
+  fetchDocuments: (kbId: string) => Promise<void>;
+  fetchDocumentChunks: (kbId: string, docId: string) => Promise<void>;
   createBase: (data: { name: string; description?: string; isPublic?: boolean }) => Promise<void>;
   deleteBase: (kbId: string) => Promise<void>;
   addText: (kbId: string, content: string) => Promise<void>;
+  deleteDocument: (kbId: string, docId: string) => Promise<void>;
   search: (query: string, topK?: number) => Promise<void>;
   setCurrentBase: (kb: KnowledgeBase | null) => void;
+  refreshCurrentBase: () => Promise<void>;
   setSearchQuery: (q: string) => void;
 }
 
-export const useKnowledgeStore = create<KnowledgeState>((set) => ({
+export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   bases: [],
   currentBase: null,
+  documents: [],
+  documentsLoading: false,
+  documentChunks: {},
+  chunksLoading: null,
   searchQuery: '',
   searchResults: [],
   isSearching: false,
@@ -34,6 +52,39 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
       const data = await res.json();
       set({ bases: data.data || [] });
     } catch { /* ignore */ }
+  },
+
+  fetchDocuments: async (kbId) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    set({ documentsLoading: true });
+    try {
+      const res = await fetch(`/api/v1/knowledge/bases/${kbId}/documents`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      // The listDocuments endpoint returns all documents for this KB
+      set({ documents: data.data || [] });
+    } catch { /* ignore */ }
+    finally { set({ documentsLoading: false }); }
+  },
+
+  fetchDocumentChunks: async (kbId, docId) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    set({ chunksLoading: docId });
+    try {
+      const res = await fetch(`/api/v1/knowledge/bases/${kbId}/documents/${docId}/chunks`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      set((state) => ({
+        documentChunks: { ...state.documentChunks, [docId]: data.data || [] },
+        chunksLoading: null,
+      }));
+    } catch {
+      set({ chunksLoading: null });
+    }
   },
 
   createBase: async (data) => {
@@ -79,6 +130,22 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
         },
         body: JSON.stringify({ content }),
       });
+      // Refresh document list after adding text
+      await get().fetchDocuments(kbId);
+    } catch { /* ignore */ }
+  },
+
+  deleteDocument: async (kbId, docId) => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    try {
+      await fetch(`/api/v1/knowledge/bases/${kbId}/documents/${docId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      set((state) => ({
+        documents: state.documents.filter((d) => d.id !== docId),
+      }));
     } catch { /* ignore */ }
   },
 
@@ -97,6 +164,23 @@ export const useKnowledgeStore = create<KnowledgeState>((set) => ({
     }
   },
 
-  setCurrentBase: (kb) => set({ currentBase: kb }),
+  setCurrentBase: (kb) => {
+    set({ currentBase: kb });
+    if (kb) {
+      // Auto-fetch documents when selecting a base
+      get().fetchDocuments(kb.id);
+    } else {
+      set({ documents: [] });
+    }
+  },
+
+  refreshCurrentBase: async () => {
+    const kb = get().currentBase;
+    if (kb) {
+      await get().fetchDocuments(kb.id);
+      await get().fetchBases();
+    }
+  },
+
   setSearchQuery: (q) => set({ searchQuery: q }),
 }));

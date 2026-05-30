@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
-type EmbeddingProviderType = 'deepseek' | 'openai';
+type EmbeddingProviderType = 'deepseek' | 'openai' | 'none';
 
 @Injectable()
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
   private readonly provider: EmbeddingProviderType;
   private readonly apiKey: string;
+  private warnedOnce = false;
 
   // DeepSeek
   private readonly deepseekUrl: string;
@@ -19,7 +20,7 @@ export class EmbeddingService {
   private readonly openaiModel: string;
 
   constructor() {
-    this.provider = (process.env.EMBEDDING_PROVIDER || 'openai') as EmbeddingProviderType;
+    this.provider = (process.env.EMBEDDING_PROVIDER || 'deepseek') as EmbeddingProviderType;
     this.apiKey = process.env.DEEPSEEK_API_KEY || '';
 
     // DeepSeek config
@@ -37,14 +38,18 @@ export class EmbeddingService {
       case 'openai':
         return this.embedOpenAI(text);
       case 'deepseek':
-      default:
         return this.embedDeepSeek(text);
+      default:
+        return [];
     }
   }
 
   private async embedDeepSeek(text: string): Promise<number[]> {
     if (!this.apiKey) {
-      this.logger.warn('DEEPSEEK_API_KEY not set, embedding unavailable');
+      if (!this.warnedOnce) {
+        this.logger.warn('DEEPSEEK_API_KEY not set, embedding unavailable');
+        this.warnedOnce = true;
+      }
       return [];
     }
 
@@ -60,16 +65,19 @@ export class EmbeddingService {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
           },
-          timeout: 30000,
+          timeout: 10000,
         },
       );
 
       return response.data.data?.[0]?.embedding || [];
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        this.logger.warn(`DeepSeek embedding endpoint not found (404) at ${this.deepseekUrl}. Set EMBEDDING_PROVIDER=openai or configure a working provider.`);
-      } else {
-        this.logger.warn(`DeepSeek embedding error: ${error.message}`);
+      if (error.response?.status === 404 && !this.warnedOnce) {
+        this.logger.warn(
+          `DeepSeek embeddings API not available (404). ` +
+          `Semantic search disabled; content will use zero-vector fallback. ` +
+          `To enable embeddings, set EMBEDDING_PROVIDER=openai and configure OPENAI_API_KEY.`,
+        );
+        this.warnedOnce = true;
       }
       return [];
     }
@@ -77,7 +85,10 @@ export class EmbeddingService {
 
   private async embedOpenAI(text: string): Promise<number[]> {
     if (!this.openaiApiKey) {
-      this.logger.warn('OPENAI_API_KEY not set, OpenAI embedding unavailable');
+      if (!this.warnedOnce) {
+        this.logger.warn('OPENAI_API_KEY not set, OpenAI embedding unavailable');
+        this.warnedOnce = true;
+      }
       return [];
     }
 
@@ -99,7 +110,10 @@ export class EmbeddingService {
 
       return response.data.data?.[0]?.embedding || [];
     } catch (error: any) {
-      this.logger.warn(`OpenAI embedding error: ${error.message}`);
+      if (!this.warnedOnce) {
+        this.logger.warn(`OpenAI embedding error: ${error.message}`);
+        this.warnedOnce = true;
+      }
       return [];
     }
   }

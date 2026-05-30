@@ -116,6 +116,21 @@ export interface KnowledgeBase {
   _count?: { documents: number; chunks: number };
 }
 
+export interface KnowledgeDocument {
+  id: string;
+  kbId: string;
+  fileName: string;
+  fileSize?: number | null;
+  fileType?: string | null;
+  fileUrl?: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  totalChunks: number;
+  processedChunks: number;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiResponse<T = any> {
   code: number;
   message: string;

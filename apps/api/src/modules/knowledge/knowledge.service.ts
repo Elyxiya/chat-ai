@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { RagEngine } from '../agent/rag/rag-engine.service';
 import { CreateKbDto } from './dto/knowledge.dto';
 
 @Injectable()
 export class KnowledgeService {
+  private readonly logger = new Logger(KnowledgeService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ragEngine: RagEngine,
@@ -91,6 +93,7 @@ export class KnowledgeService {
         doc.content,
         kb.chunkSize,
         kb.chunkOverlap,
+        { documentId: document.id },  // Tag chunks with document ID for cleanup
       );
 
       await this.prisma.knowledgeDocument.update({
@@ -135,12 +138,60 @@ export class KnowledgeService {
     });
   }
 
+  async getDocumentChunks(kbId: string, docId: string) {
+    const chunks = await this.prisma.knowledgeChunk.findMany({
+      where: { kbId },
+      select: { id: true, content: true, chunkIndex: true, metadata: true, createdAt: true },
+      orderBy: { chunkIndex: 'asc' },
+    });
+
+    return chunks
+      .filter((c) => {
+        const meta = c.metadata as Record<string, unknown> | null;
+        return meta?.documentId === docId;
+      })
+      .map(({ id, content, chunkIndex, createdAt }) => ({
+        id,
+        content,
+        chunk_index: chunkIndex,
+        created_at: createdAt,
+      }));
+  }
+
   async deleteDocument(userId: string, kbId: string, docId: string) {
     const kb = await this.prisma.knowledgeBase.findUnique({ where: { id: kbId } });
     if (!kb) throw new NotFoundException('Knowledge base not found');
     if (kb.ownerId !== userId) throw new ForbiddenException('Access denied');
 
-    await this.prisma.knowledgeDocument.delete({ where: { id: docId } });
+    // Delete associated chunks by finding them with Prisma and filtering in JS
+    // Avoids $executeRaw template literal type inference issues
+    try {
+      const allChunks = await this.prisma.knowledgeChunk.findMany({
+        where: { kbId },
+        select: { id: true, metadata: true },
+      });
+      const matchIds = allChunks
+        .filter((c) => {
+          const meta = c.metadata as Record<string, unknown> | null;
+          return meta?.documentId === docId;
+        })
+        .map((c) => c.id);
+
+      if (matchIds.length > 0) {
+        await this.prisma.knowledgeChunk.deleteMany({
+          where: { id: { in: matchIds } },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to delete chunks for document ${docId}: ${err.message}`);
+    }
+
+    try {
+      await this.prisma.knowledgeDocument.delete({ where: { id: docId } });
+    } catch (err) {
+      this.logger.error(`Failed to delete document ${docId}: ${err.message}`);
+      throw new InternalServerErrorException('Failed to delete document');
+    }
   }
 
   async search(userId: string, query: string, topK = 5) {
