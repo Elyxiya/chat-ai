@@ -276,6 +276,130 @@ export class ChatGateway
     client.emit('joined_agent', { sessionId });
   }
 
+  // ==================== WebRTC Call Signaling ====================
+
+  @SubscribeMessage('call:offer')
+  async handleCallOffer(
+    @MessageBody() data: { targetUserId: string; sdp: any; callType: 'audio' | 'video' },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (!targetSockets || targetSockets.size === 0) {
+      client.emit('call:ended', { userId: data.targetUserId, reason: 'offline' });
+      return;
+    }
+
+    targetSockets.forEach((socketId) => {
+      this.server.to(socketId).emit('call:incoming', {
+        callerId: user.id,
+        callerName: user.username,
+        callerAvatar: user.avatarUrl,
+        sdp: data.sdp,
+        callType: data.callType,
+      });
+    });
+  }
+
+  @SubscribeMessage('call:answer')
+  async handleCallAnswer(
+    @MessageBody() data: { targetUserId: string; sdp: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (targetSockets) {
+      targetSockets.forEach((socketId) => {
+        this.server.to(socketId).emit('call:accepted', {
+          calleeId: user.id,
+          calleeName: user.username,
+          sdp: data.sdp,
+        });
+      });
+    }
+  }
+
+  @SubscribeMessage('call:ice-candidate')
+  async handleIceCandidate(
+    @MessageBody() data: { targetUserId: string; candidate: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (targetSockets) {
+      targetSockets.forEach((socketId) => {
+        this.server.to(socketId).emit('call:ice-candidate', {
+          userId: user.id,
+          candidate: data.candidate,
+        });
+      });
+    }
+  }
+
+  @SubscribeMessage('call:reject')
+  async handleCallReject(
+    @MessageBody() data: { targetUserId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (targetSockets) {
+      targetSockets.forEach((socketId) => {
+        this.server.to(socketId).emit('call:ended', {
+          userId: user.id,
+          reason: 'reject',
+        });
+      });
+    }
+  }
+
+  @SubscribeMessage('call:end')
+  async handleCallEnd(
+    @MessageBody() data: { targetUserId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (targetSockets) {
+      targetSockets.forEach((socketId) => {
+        this.server.to(socketId).emit('call:ended', {
+          userId: user.id,
+          reason: 'hangup',
+        });
+      });
+    }
+  }
+
+  @SubscribeMessage('call:toggle')
+  async handleCallToggle(
+    @MessageBody() data: { targetUserId: string; type: 'audio' | 'video'; enabled: boolean },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user as any;
+    if (!user) return;
+
+    const targetSockets = this.userSockets.get(data.targetUserId);
+    if (targetSockets) {
+      targetSockets.forEach((socketId) => {
+        this.server.to(socketId).emit('call:toggle', {
+          userId: user.id,
+          type: data.type,
+          enabled: data.enabled,
+        });
+      });
+    }
+  }
+
   emitToUser(userId: string, event: string, data: any) {
     const sockets = this.userSockets.get(userId);
     if (sockets) {

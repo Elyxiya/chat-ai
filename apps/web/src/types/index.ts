@@ -159,3 +159,45 @@ export enum WsMessageType {
   NOTICE = 11,
   AI_CHAT = 12,
 }
+
+// ==================== WebRTC Call Types ====================
+
+export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connected';
+
+export type CallType = 'audio' | 'video';
+
+export interface CallPeer {
+  id: string;
+  username: string;
+  avatarUrl?: string | null;
+}
+
+export interface CallOfferData {
+  callerId: string;
+  callerName: string;
+  callerAvatar?: string | null;
+  sdp: any;
+  callType: CallType;
+}
+
+export interface CallAnswerData {
+  calleeId: string;
+  calleeName: string;
+  sdp: any;
+}
+
+export interface CallIceCandidateData {
+  userId: string;
+  candidate: any;
+}
+
+export interface CallEndedData {
+  userId: string;
+  reason: 'hangup' | 'reject' | 'offline';
+}
+
+export interface CallToggleData {
+  userId: string;
+  type: 'audio' | 'video';
+  enabled: boolean;
+}
