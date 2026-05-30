@@ -93,6 +93,11 @@ export class RagEngine {
     try {
       const embedding = await this.embedding.embed(content);
 
+      if (!embedding || embedding.length === 0) {
+        this.logger.warn(`Cannot store chunk: embedding is empty (API key may be missing)`);
+        return;
+      }
+
       await this.prisma.$executeRaw`
         INSERT INTO knowledge_chunks (id, kb_id, content, embedding, chunk_index, metadata, created_at)
         VALUES (
