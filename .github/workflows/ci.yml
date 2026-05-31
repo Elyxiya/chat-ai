@@ -70,7 +70,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --allow-build=@nestjs/core --allow-build=@prisma/client --allow-build=prisma --allow-build=esbuild
 
       - name: Generate Prisma Client
         run: pnpm --filter ai-native-chat-api prisma:generate
@@ -113,7 +113,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --allow-build=@nestjs/core --allow-build=@prisma/client --allow-build=prisma --allow-build=esbuild
 
       - name: TypeCheck
         run: pnpm --filter ai-native-chat-web typecheck
@@ -142,11 +142,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-      - run: pnpm install
-      - run: pnpm --filter ai-native-chat-api prisma:generate
+      - name: Install dependencies
+        run: pnpm install --allow-build=@nestjs/core --allow-build=@prisma/client --allow-build=prisma --allow-build=esbuild
+      - name: Generate Prisma Client
+        run: pnpm --filter ai-native-chat-api prisma:generate
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
-      - run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
+      - name: Run tests with coverage
+        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
           REDIS_HOST: localhost
@@ -240,7 +243,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --allow-build=@nestjs/core --allow-build=@prisma/client --allow-build=prisma --allow-build=esbuild
 
       - name: Install Playwright browsers
         run: npx playwright install chromium
