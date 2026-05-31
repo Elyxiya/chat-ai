@@ -23,6 +23,9 @@ describe('NotificationService', () => {
         deleteMany: jest.fn(),
         count: jest.fn(),
       },
+      chatSessionMember: {
+        findUnique: jest.fn(),
+      },
     };
 
     mockChatGateway = {
@@ -117,6 +120,7 @@ describe('NotificationService', () => {
   describe('createMention', () => {
     it('should create MENTION notification with content preview', async () => {
       const notification = makeNotification({ type: NotificationType.MENTION });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ muted: false, mutedUntil: null });
       mockPrisma.notification.create.mockResolvedValue(notification);
 
       await service.createMention('session-1', 'user-2', 'Bob', 'Hello @user-2!');
@@ -268,6 +272,7 @@ describe('NotificationService', () => {
         type: NotificationType.MENTION,
         data: { sessionId: 'session-1' },
       });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ muted: false, mutedUntil: null });
       mockPrisma.notification.create.mockResolvedValue(notification);
 
       await service.createMention('session-1', 'user-2', 'Bob', 'Hello @user-2!');
@@ -285,6 +290,7 @@ describe('NotificationService', () => {
     it('should truncate long content in mention notification to 50 chars', async () => {
       const longContent = 'A'.repeat(100);
       const notification = makeNotification({ type: NotificationType.MENTION });
+      mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ muted: false, mutedUntil: null });
       mockPrisma.notification.create.mockResolvedValue(notification);
 
       await service.createMention('session-1', 'user-2', 'Bob', longContent);
