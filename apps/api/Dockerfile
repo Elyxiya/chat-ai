@@ -19,7 +19,7 @@ RUN pnpm install --filter ai-native-chat-api --prod
 FROM node:22-alpine AS builder
 RUN apk add --no-cache openssl
 RUN npm install -g pnpm@10
-ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma/
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 WORKDIR /app
 RUN echo "registry=https://mirrors.cloud.tencent.com/npm/" > .npmrc && \
     echo "fetch-timeout=120000" >> .npmrc && \
