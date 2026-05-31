@@ -85,7 +85,7 @@ jobs:
         run: pnpm --filter ai-native-chat-api lint
 
       - name: Run tests with coverage
-        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
+        run: pnpm --filter ai-native-chat-api test --maxWorkers=2 --coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
           REDIS_HOST: localhost
@@ -118,7 +118,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm --version
           pnpm --version
           pnpm install || true
           pnpm approve-builds --all
@@ -162,7 +161,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
       - name: Run tests with coverage
-        run: pnpm --filter ai-native-chat-api test -- --maxWorkers=2 --coverage
+        run: pnpm --filter ai-native-chat-api test --maxWorkers=2 --coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/minichat_test
           REDIS_HOST: localhost
