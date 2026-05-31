@@ -72,6 +72,7 @@ jobs:
       - name: Install dependencies
         run: |
           pnpm --version
+          pnpm install || true
           pnpm approve-builds --all
           pnpm install
 
@@ -119,6 +120,7 @@ jobs:
         run: |
           pnpm --version
           pnpm --version
+          pnpm install || true
           pnpm approve-builds --all
           pnpm install
 
@@ -152,6 +154,7 @@ jobs:
       - name: Install dependencies
         run: |
           pnpm --version
+          pnpm install || true
           pnpm approve-builds --all
           pnpm install
       - name: Generate Prisma Client
@@ -255,6 +258,7 @@ jobs:
       - name: Install dependencies
         run: |
           pnpm --version
+          pnpm install || true
           pnpm approve-builds --all
           pnpm install
 
