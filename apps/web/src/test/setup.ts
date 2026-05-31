@@ -1,7 +1,11 @@
 import '@testing-library/jest-dom/vitest';
+import { vi } from 'vitest';
 
 // Mock scrollIntoView for jsdom
 Element.prototype.scrollIntoView = vi.fn() as any;
+
+// Mock elementFromPoint for jsdom (needed by prosemirror-view / Tiptap)
+document.elementFromPoint = vi.fn(() => document.createElement('div')) as any;
 
 // Mock IntersectionObserver for jsdom — fires callback synchronously so inView is set immediately
 const mockIntersectionCallbacks: Set<IntersectionObserverCallback> = new Set();
@@ -38,3 +42,17 @@ Object.defineProperty(window, 'ResizeObserver', {
   configurable: true,
   value: MockResizeObserver,
 });
+
+// Auto-use __mocks__/RichTextEditor.tsx (replaces Tiptap with textarea in tests)
+vi.mock('@/components/RichTextEditor/RichTextEditor');
+
+// Mock react-i18next for components using useTranslation
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: 'zh', changeLanguage: vi.fn() },
+  }),
+  initReactI18next: { type: '3rdParty', init: vi.fn() },
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
+}));
+
