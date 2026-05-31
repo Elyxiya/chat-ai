@@ -29,16 +29,6 @@
     "setup": "pnpm install && pnpm --filter ai-native-chat-api db:generate",
     "check": "pnpm typecheck && pnpm lint"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@nestjs/core",
-      "@prisma/client",
-      "@prisma/engines",
-      "@scarf/scarf",
-      "esbuild",
-      "prisma"
-    ]
-  },
   "devDependencies": {
     "concurrently": "^9.1.0",
     "wait-on": "^8.0.5"
