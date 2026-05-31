@@ -25,6 +25,7 @@ describe('KnowledgeService', () => {
         findMany: jest.fn(),
       },
       knowledgeChunk: {
+        findMany: jest.fn(),
         deleteMany: jest.fn(),
       },
     };
@@ -260,10 +261,15 @@ describe('KnowledgeService', () => {
     it('should delete document as base owner', async () => {
       const kb = makeKnowledgeBase({ id: 'kb-1', ownerId: 'user-1' });
       mockPrisma.knowledgeBase.findUnique.mockResolvedValue(kb);
+      mockPrisma.knowledgeChunk.findMany.mockResolvedValue([]);
       mockPrisma.knowledgeDocument.delete.mockResolvedValue({});
 
       await service.deleteDocument('user-1', 'kb-1', 'doc-1');
 
+      expect(mockPrisma.knowledgeChunk.findMany).toHaveBeenCalledWith({
+        where: { kbId: 'kb-1' },
+        select: { id: true, metadata: true },
+      });
       expect(mockPrisma.knowledgeDocument.delete).toHaveBeenCalledWith({ where: { id: 'doc-1' } });
     });
 

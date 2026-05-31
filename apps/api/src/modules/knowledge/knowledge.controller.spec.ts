@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { KnowledgeController } from './knowledge.controller';
 import { KnowledgeService } from './knowledge.service';
+import { FileParserService } from './file-parser.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { makeKnowledgeBase, makeKnowledgeDocument } from '../../test/factories/entities.factory';
 
 describe('KnowledgeController', () => {
   let controller: KnowledgeController;
   let mockKnowledgeService: any;
+  let mockFileParser: any;
 
   beforeEach(async () => {
     mockKnowledgeService = {
@@ -22,9 +24,16 @@ describe('KnowledgeController', () => {
       search: jest.fn(),
     };
 
+    mockFileParser = {
+      parse: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [KnowledgeController],
-      providers: [{ provide: KnowledgeService, useValue: mockKnowledgeService }],
+      providers: [
+        { provide: KnowledgeService, useValue: mockKnowledgeService },
+        { provide: FileParserService, useValue: mockFileParser },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -105,11 +114,19 @@ describe('KnowledgeController', () => {
         mimetype: 'text/plain',
         buffer: Buffer.from('test content'),
       } as Express.Multer.File;
+
+      mockFileParser.parse.mockReturnValue({
+        content: 'test content',
+        fileName: 'test.txt',
+        fileType: 'text/plain',
+        fileSize: 1024,
+      });
       mockKnowledgeService.addDocument.mockResolvedValue({ documentId: 'doc-1', chunksAdded: 3 });
 
       const result = await controller.uploadDocument('user-1', 'kb-1', mockFile);
 
       expect((result as any).data.documentId).toBe('doc-1');
+      expect(mockFileParser.parse).toHaveBeenCalledWith(mockFile);
     });
   });
 
