@@ -177,4 +177,52 @@ describe('MessageBubble', () => {
     const bubble = container.querySelector('.bg-yellow-50');
     expect(bubble).toBeInTheDocument();
   });
+
+  it('MSG-WEB-15: should show bookmark dialog for unbookmarked message', () => {
+    const onBookmark = vi.fn();
+    const { container } = render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    // Open menu
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    // Click Bookmark
+    fireEvent.click(screen.getByText('Bookmark'));
+    // Should show tag input dialog
+    expect(screen.getByPlaceholderText('work, important, ...')).toBeInTheDocument();
+    expect(screen.getByText('Save')).toBeInTheDocument();
+    expect(screen.getByText('Skip')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('MSG-WEB-16: should call onBookmark callback when Skip is clicked', () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    // Open menu
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    // Click Bookmark
+    fireEvent.click(screen.getByText('Bookmark'));
+    // Click Skip
+    fireEvent.click(screen.getByText('Skip'));
+    expect(onBookmark).toHaveBeenCalled();
+  });
+
+  it('MSG-WEB-17: should show Remove Bookmark for bookmarked message', () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} bookmarked={true} />);
+    // Open menu
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    // Should show Remove Bookmark instead of Bookmark
+    expect(screen.getByText('Remove Bookmark')).toBeInTheDocument();
+  });
+
+  it('MSG-WEB-18: should call onBookmark when Remove Bookmark is clicked', () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} bookmarked={true} />);
+    // Open menu
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    fireEvent.click(screen.getByText('Remove Bookmark'));
+    expect(onBookmark).toHaveBeenCalled();
+  });
 });

@@ -124,6 +124,10 @@ export const chatApi = {
     apiClient.post(`/chat/messages/${messageId}/bookmark`),
   getBookmarks: (limit?: number) =>
     apiClient.get('/chat/bookmarks', { params: { limit } }),
+  updateBookmark: (messageId: string, data: { tags?: string[]; note?: string }) =>
+    apiClient.patch(`/chat/messages/${messageId}/bookmark`, data),
+  searchBookmarks: (params?: { tag?: string; q?: string }) =>
+    apiClient.get('/chat/bookmarks/search', { params }),
   togglePinSession: (sessionId: string) =>
     apiClient.patch(`/chat/sessions/${sessionId}/pin`),
   muteSession: (sessionId: string, muted: boolean, muteUntil?: string) =>

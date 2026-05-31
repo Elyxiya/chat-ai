@@ -216,6 +216,8 @@ model Bookmark {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   messageId String   @map("message_id")
+  tags      String[] @default([])
+  note      String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)

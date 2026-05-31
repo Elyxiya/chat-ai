@@ -59,6 +59,7 @@ describe('ChatService', () => {
         create: jest.fn(),
         delete: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
       notification: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -1121,6 +1122,129 @@ describe('ChatService', () => {
       mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
 
       await expect(service.unsubscribeChannel('user-1', 'channel-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateBookmark', () => {
+    const makeBookmark = (overrides = {}) => ({
+      id: 'bm1',
+      userId: 'user-1',
+      messageId: 'msg1',
+      tags: [],
+      note: null,
+      createdAt: new Date(),
+      message: {
+        id: 'msg1',
+        content: 'test message',
+        contentType: 'text',
+        createdAt: new Date(),
+        sender: { id: 'user-2', username: 'testuser', avatarUrl: null, nickname: null },
+        session: { id: 'session1', name: 'Test Session', sessionType: 'group' },
+      },
+      ...overrides,
+    });
+
+    it('BOOK-API-01: should update bookmark tags', async () => {
+      mockPrisma.bookmark.findUnique.mockResolvedValue(makeBookmark());
+      mockPrisma.bookmark.update.mockResolvedValue(makeBookmark({ tags: ['work', 'important'] }));
+
+      const result = await service.updateBookmark('user-1', 'msg1', { tags: ['work', 'important'] });
+      expect(result.tags).toEqual(['work', 'important']);
+      expect(mockPrisma.bookmark.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'bm1' },
+          data: { tags: ['work', 'important'] },
+        }),
+      );
+    });
+
+    it('BOOK-API-02: should update bookmark note', async () => {
+      mockPrisma.bookmark.findUnique.mockResolvedValue(makeBookmark());
+      mockPrisma.bookmark.update.mockResolvedValue(makeBookmark({ note: 'This is important' }));
+
+      const result = await service.updateBookmark('user-1', 'msg1', { note: 'This is important' });
+      expect(result.note).toBe('This is important');
+    });
+
+    it('BOOK-API-03: should throw NotFoundException when bookmark does not exist', async () => {
+      mockPrisma.bookmark.findUnique.mockResolvedValue(null);
+      await expect(service.updateBookmark('user-1', 'nonexistent', { tags: ['work'] }))
+        .rejects.toThrow(NotFoundException);
+    });
+
+    it('BOOK-API-04: should clear tags when passing empty array', async () => {
+      mockPrisma.bookmark.findUnique.mockResolvedValue(makeBookmark({ tags: ['work', 'important'] }));
+      mockPrisma.bookmark.update.mockResolvedValue(makeBookmark({ tags: [] }));
+
+      const result = await service.updateBookmark('user-1', 'msg1', { tags: [] });
+      expect(result.tags).toEqual([]);
+    });
+  });
+
+  describe('searchBookmarksByTag', () => {
+    const makeBookmark = (overrides = {}) => ({
+      id: 'bm1',
+      userId: 'user-1',
+      messageId: 'msg1',
+      tags: ['work'],
+      note: null,
+      createdAt: new Date(),
+      message: {
+        id: 'msg1',
+        content: 'meeting notes',
+        contentType: 'text',
+        createdAt: new Date(),
+        sender: { id: 'user-2', username: 'testuser', avatarUrl: null, nickname: null },
+        session: { id: 'session1', name: 'Test Session', sessionType: 'group' },
+      },
+      ...overrides,
+    });
+
+    it('BOOK-API-05: should search bookmarks by tag', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([makeBookmark()]);
+      const result = await service.searchBookmarksByTag('user-1', 'work');
+      expect(result).toHaveLength(1);
+      expect(mockPrisma.bookmark.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tags: { has: 'work' } }),
+        }),
+      );
+    });
+
+    it('BOOK-API-06: should search bookmarks by keyword', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([makeBookmark()]);
+      const result = await service.searchBookmarksByTag('user-1', undefined, 'meeting');
+      expect(result).toHaveLength(1);
+    });
+
+    it('BOOK-API-07: should return empty array when no bookmarks match', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([]);
+      const result = await service.searchBookmarksByTag('user-1', 'nonexistent');
+      expect(result).toEqual([]);
+    });
+
+    it('BOOK-API-08: should search by both tag and keyword combined', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([makeBookmark()]);
+      const result = await service.searchBookmarksByTag('user-1', 'work', 'meeting');
+      expect(result).toHaveLength(1);
+    });
+
+    it('BOOK-API-09: should return all bookmarks when no filter', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([
+        makeBookmark(),
+        makeBookmark({ id: 'bm2', messageId: 'msg2' }),
+      ]);
+      const result = await service.searchBookmarksByTag('user-1');
+      expect(result).toHaveLength(2);
+    });
+
+    it('BOOK-API-10: should include tags and note in response', async () => {
+      mockPrisma.bookmark.findMany.mockResolvedValue([
+        makeBookmark({ tags: ['work'], note: 'My note' }),
+      ]);
+      const result = await service.searchBookmarksByTag('user-1', 'work');
+      expect(result[0].tags).toEqual(['work']);
+      expect(result[0].note).toBe('My note');
     });
   });
 });

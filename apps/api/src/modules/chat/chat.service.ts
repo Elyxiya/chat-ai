@@ -1171,6 +1171,75 @@ export class ChatService {
     return bookmarks.map((b) => ({
       id: b.id,
       bookmarkedAt: b.createdAt,
+      tags: b.tags,
+      note: b.note,
+      message: b.message,
+    }));
+  }
+
+  async updateBookmark(userId: string, messageId: string, data: { tags?: string[]; note?: string }) {
+    const existing = await this.prisma.bookmark.findUnique({
+      where: { userId_messageId: { userId, messageId } },
+    });
+    if (!existing) throw new NotFoundException('Bookmark not found');
+
+    const updated = await this.prisma.bookmark.update({
+      where: { id: existing.id },
+      data: {
+        ...(data.tags !== undefined && { tags: data.tags }),
+        ...(data.note !== undefined && { note: data.note }),
+      },
+      include: {
+        message: {
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            session: { select: { id: true, name: true, sessionType: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      id: updated.id,
+      bookmarkedAt: updated.createdAt,
+      tags: updated.tags,
+      note: updated.note,
+      message: updated.message,
+    };
+  }
+
+  async searchBookmarksByTag(userId: string, tag?: string, query?: string) {
+    const where: any = { userId };
+
+    if (tag) {
+      where.tags = { has: tag };
+    }
+
+    if (query) {
+      where.message = {
+        content: { contains: query, mode: 'insensitive' },
+      };
+    }
+
+    const bookmarks = await this.prisma.bookmark.findMany({
+      where,
+      include: {
+        message: {
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            session: { select: { id: true, name: true, sessionType: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return bookmarks.map((b) => ({
+      id: b.id,
+      bookmarkedAt: b.createdAt,
+      tags: b.tags,
+      note: b.note,
       message: b.message,
     }));
   }

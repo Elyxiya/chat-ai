@@ -160,6 +160,23 @@ export enum WsMessageType {
   AI_CHAT = 12,
 }
 
+// ==================== Bookmark Types ====================
+
+export interface Bookmark {
+  id: string;
+  bookmarkedAt: string;
+  tags: string[];
+  note?: string | null;
+  message: {
+    id: string;
+    content: string;
+    contentType: string;
+    createdAt: string;
+    sender: { id: string; username: string; avatarUrl?: string | null; nickname?: string | null };
+    session: { id: string; name: string | null; sessionType: string };
+  };
+}
+
 // ==================== WebRTC Call Types ====================
 
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connected';

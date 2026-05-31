@@ -386,6 +386,26 @@ export class ChatController {
     return success(await this.chatService.getBookmarks(userId, limit ? Number(limit) : 50));
   }
 
+  @Patch('messages/:id/bookmark')
+  @ApiOperation({ summary: 'Update bookmark tags and note' })
+  async updateBookmark(
+    @CurrentUser('id') userId: string,
+    @Param('id') messageId: string,
+    @Body() body: { tags?: string[]; note?: string },
+  ) {
+    return success(await this.chatService.updateBookmark(userId, messageId, body));
+  }
+
+  @Get('bookmarks/search')
+  @ApiOperation({ summary: 'Search bookmarks by tag or content' })
+  async searchBookmarks(
+    @CurrentUser('id') userId: string,
+    @Query('tag') tag?: string,
+    @Query('q') query?: string,
+  ) {
+    return success(await this.chatService.searchBookmarksByTag(userId, tag, query));
+  }
+
   @Patch('sessions/:sessionId/mute')
   @ApiOperation({ summary: 'Mute or unmute a session' })
   async muteSession(

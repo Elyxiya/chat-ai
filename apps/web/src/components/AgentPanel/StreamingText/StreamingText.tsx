@@ -81,7 +81,7 @@ export default function StreamingText({
       }
     };
     // NOTE: do NOT add displayedContent.length to deps — it causes an infinite render loop
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [content, isStreaming, typeChar]);
 
   if (!displayedContent) return null;

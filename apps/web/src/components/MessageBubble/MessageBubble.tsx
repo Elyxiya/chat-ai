@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import MarkdownIt from 'markdown-it';
 import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
+import { chatApi } from '@/api/client';
 import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
 import LazyImage from '../LazyImage/LazyImage';
 import ReadReceiptPanel from '../ReadReceiptPanel/ReadReceiptPanel';
@@ -36,6 +37,8 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
   const [showReactions, setShowReactions] = useState(false);
   const [showReadReceipts, setShowReadReceipts] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  const [bookmarkTags, setBookmarkTags] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,13 +46,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowMenu(false);
         setShowReactions(false);
+        setShowBookmarkDialog(false);
       }
     };
-    if (showMenu) {
+    if (showMenu || showBookmarkDialog) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showMenu]);
+  }, [showMenu, showBookmarkDialog]);
 
   const content = useMemo(() => {
     if (message.isRecalled) {
@@ -205,7 +209,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
               <span>Forward</span>
             </button>
             <button
-              onClick={() => { if (onBookmark) { onBookmark(); } setShowMenu(false); }}
+              onClick={() => {
+                setShowMenu(false);
+                if (bookmarked) {
+                  if (onBookmark) onBookmark();
+                } else {
+                  setShowBookmarkDialog(true);
+                }
+              }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
               <span>{bookmarked ? 'Remove Bookmark' : 'Bookmark'}</span>
@@ -228,6 +239,78 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
               onSelect={(emoji) => { if (onReaction) { onReaction(emoji); } setShowReactions(false); }}
               onClose={() => setShowReactions(false)}
             />
+          </div>
+        )}
+
+        {/* Bookmark dialog */}
+        {showBookmarkDialog && (
+          <div className="absolute z-10 mt-1 right-0">
+            <div className="bg-surface border border-border rounded-lg shadow-lg p-3 min-w-[200px]">
+              <p className="text-xs font-medium text-text-secondary mb-2">Add tags (optional)</p>
+              <input
+                type="text"
+                value={bookmarkTags}
+                onChange={(e) => setBookmarkTags(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const tags = bookmarkTags.split(',').map((t) => t.trim()).filter(Boolean);
+                    if (tags.length > 0) {
+                      chatApi.toggleBookmark(message.id).then(() => {
+                        if (tags.length > 0) {
+                          chatApi.updateBookmark(message.id, { tags });
+                        }
+                        if (onBookmark) onBookmark();
+                      });
+                    } else {
+                      if (onBookmark) onBookmark();
+                    }
+                    setShowBookmarkDialog(false);
+                    setBookmarkTags('');
+                  }
+                }}
+                placeholder="work, important, ..."
+                className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                autoFocus
+              />
+              <p className="text-[10px] text-text-secondary mt-1">Separate tags with commas, press Enter to save</p>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => {
+                    const tags = bookmarkTags.split(',').map((t) => t.trim()).filter(Boolean);
+                    chatApi.toggleBookmark(message.id).then(() => {
+                      if (tags.length > 0) {
+                        chatApi.updateBookmark(message.id, { tags });
+                      }
+                      if (onBookmark) onBookmark();
+                    });
+                    setShowBookmarkDialog(false);
+                    setBookmarkTags('');
+                  }}
+                  className="px-3 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    if (onBookmark) onBookmark();
+                    setShowBookmarkDialog(false);
+                    setBookmarkTags('');
+                  }}
+                  className="px-3 py-1 text-xs text-text-secondary hover:text-text transition-colors"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBookmarkDialog(false);
+                    setBookmarkTags('');
+                  }}
+                  className="px-3 py-1 text-xs text-text-secondary hover:text-text transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
