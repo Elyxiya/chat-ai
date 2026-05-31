@@ -46,13 +46,31 @@ Object.defineProperty(window, 'ResizeObserver', {
 // Auto-use __mocks__/RichTextEditor.tsx (replaces Tiptap with textarea in tests)
 vi.mock('@/components/RichTextEditor/RichTextEditor');
 
-// Mock react-i18next for components using useTranslation
+// Mock react-i18next with English translations matching component & test expectations
+const translationMap: Record<string, string> = {
+  'auth.noAccount': "Don't have an account? Sign up",
+  'auth.haveAccount': 'Already have an account? Sign in',
+  'settings.title': 'Settings',
+  'settings.language': 'Language',
+  'settings.languageZh': '中文',
+  'settings.languageEn': 'English',
+  'settings.defaultAgentMode': 'Default Mode',
+  'profile.profileInfo': 'Profile',
+  'profile.nickname': 'Nickname',
+  'profile.nicknamePlaceholder': 'Enter your nickname',
+  'profile.bio': 'Bio',
+  'profile.bioPlaceholder': 'Tell us about yourself',
+  'common.saving': 'Saving...',
+  'common.save': 'Save Changes',
+  'agent.title': 'AI Agent Settings',
+  'auth.logout': 'Sign Out',
+};
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) => translationMap[key] || key.split('.').pop() || key,
     i18n: { language: 'zh', changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: '3rdParty', init: vi.fn() },
-  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
+  Trans: ({ i18nKey }: { i18nKey: string }) => translationMap[i18nKey] || i18nKey,
 }));
 

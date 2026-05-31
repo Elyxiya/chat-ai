@@ -230,7 +230,7 @@ describe('SessionList', () => {
       </MemoryRouter>,
     );
 
-    const aliceButton = screen.getByText('Alice').closest('button');
+    const aliceButton = screen.getByText('Alice').closest('[role="button"]');
     expect(aliceButton?.className).toContain('bg-primary-50');
   });
 

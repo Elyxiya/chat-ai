@@ -95,7 +95,7 @@ describe('ChatLayout', () => {
     });
 
     expect(screen.getAllByText('Test').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('TestUser')).toBeInTheDocument();
+    expect(screen.getByText('@TestUser')).toBeInTheDocument();
     expect(screen.getByTestId('outlet')).toBeInTheDocument();
   });
 

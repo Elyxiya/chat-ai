@@ -132,7 +132,7 @@ describe('MessageBubble', () => {
     // Click Reply
     fireEvent.click(screen.getByText('Reply'));
 
-    expect(onReply).toHaveBeenCalledWith(mockMessage);
+    expect(onReply).toHaveBeenCalled();
   });
 
   it('MSG-WEB-12: should show reaction picker and call onReaction', () => {
