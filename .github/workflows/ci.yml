@@ -25,7 +25,7 @@ on:
       - '.env.example'
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
 
 jobs:
   lint-and-test-api:
@@ -36,7 +36,7 @@ jobs:
 
     services:
       postgres:
-        image: docker.icu.cn/pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
@@ -50,7 +50,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: docker.icu.cn/library/redis:7-alpine
+        image: library/redis:7-alpine
         ports:
           - 6379:6379
 
