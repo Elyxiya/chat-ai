@@ -3,6 +3,7 @@ import { useAgentStore } from '@/stores/agent.store';
 import StreamingText from '@/components/AgentPanel/StreamingText/StreamingText';
 import ThinkingChain from '@/components/AgentPanel/ThinkingChain/ThinkingChain';
 import ToolCallLog from '@/components/AgentPanel/ToolCallLog/ToolCallLog';
+import RichTextEditor from '@/components/RichTextEditor/RichTextEditor';
 
 export default function AgentChatPage() {
   const {
@@ -24,7 +25,6 @@ export default function AgentChatPage() {
   const [showThinking, setShowThinking] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     loadHistory();
@@ -41,13 +41,6 @@ export default function AgentChatPage() {
     setInput('');
     await sendStreamMessage(msg);
   }, [input, isStreaming, sendStreamMessage]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
 
   return (
     <>
@@ -217,16 +210,17 @@ export default function AgentChatPage() {
           {/* Input */}
           <div className="p-4 border-t border-border bg-surface">
             <div className="flex items-end gap-2">
-              <textarea
-                ref={textareaRef}
-                className="input-field resize-none max-h-40"
-                rows={1}
-                placeholder="Ask the AI Agent anything..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isStreaming}
-              />
+              <div className="flex-1 min-w-0">
+                <RichTextEditor
+                  value={input}
+                  onChange={setInput}
+                  onSend={() => handleSubmit()}
+                  placeholder="Ask the AI Agent anything..."
+                  minHeight="40px"
+                  maxHeight="160px"
+                  autoFocus={false}
+                />
+              </div>
               {isStreaming ? (
                 <button
                   onClick={stopStream}

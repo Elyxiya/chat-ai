@@ -7,11 +7,11 @@ import { ChatMessage } from '@/types';
 import CallController from '@/components/CallController/CallController';
 import CallNotification from '@/components/CallNotification/CallNotification';
 import CallWindow from '@/components/CallWindow/CallWindow';
-import MessageBubble from '@/components/MessageBubble/MessageBubble';
 import VirtualizedMessageList from '@/components/VirtualizedMessageList/VirtualizedMessageList';
 import FileUploadPanel from '@/components/FileUpload/FileUploadPanel';
 import ForwardModal from '@/components/ForwardModal';
 import GroupDetailPanel from '@/components/GroupDetailPanel';
+import RichTextEditor from '@/components/RichTextEditor/RichTextEditor';
 import { chatApi, uploadApi } from '@/api/client';
 
 export default function PrivateChatPage() {
@@ -47,15 +47,6 @@ export default function PrivateChatPage() {
     }
   }, [sessionId, activeSessionId, setActiveSession, loadMessages]);
 
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (sessionId) sendTyping(sessionId, true);
-    typingTimeoutRef.current = setTimeout(() => {
-      if (sessionId) sendTyping(sessionId, false);
-    }, 2000);
-  }, [sessionId, sendTyping]);
-
   const handleSend = useCallback(() => {
     if (!input.trim() || !sessionId) return;
     const content = input.trim();
@@ -75,13 +66,6 @@ export default function PrivateChatPage() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTyping(sessionId, false);
   }, [input, replyTo, sessionId, sendMessage, sendTyping]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
 
   const handleFileUpload = useCallback(async (files: File[]) => {
     if (!sessionId) return;
@@ -400,21 +384,27 @@ export default function PrivateChatPage() {
           ) : (
             <>
               <FileUploadPanel onUpload={handleFileUpload} />
-              <textarea
-                className="input-field resize-none max-h-32"
-                rows={1}
-                placeholder={replyTo ? 'Reply to message...' : 'Type a message...'}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  handleInputChange(e.target.value);
-                }}
-                onKeyDown={handleKeyDown}
-              />
+              <div className="flex-1 min-w-0">
+                <RichTextEditor
+                  value={input}
+                  onChange={(text) => {
+                    setInput(text);
+                    // Typing indicator
+                    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                    if (sessionId) sendTyping(sessionId, true);
+                    typingTimeoutRef.current = setTimeout(() => {
+                      if (sessionId) sendTyping(sessionId, false);
+                    }, 2000);
+                  }}
+                  onSend={handleSend}
+                  placeholder={replyTo ? 'Reply to message...' : 'Type a message...'}
+                  autoFocus
+                />
+              </div>
               <button
                 onClick={handleSend}
                 disabled={!input.trim()}
-                className="btn-primary px-4 py-2 flex-shrink-0"
+                className="btn-primary px-4 py-2 flex-shrink-0 self-end"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
