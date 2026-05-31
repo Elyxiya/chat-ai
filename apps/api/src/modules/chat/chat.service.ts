@@ -850,7 +850,7 @@ export class ChatService {
     },
   ) {
     if (!query || query.length < 1) {
-      return { results: [], total: 0, page: options.page, limit: options.limit };
+      return { sessions: [], results: [], total: 0, page: options.page, limit: options.limit };
     }
 
     const userSessionIds = await this.prisma.chatSessionMember.findMany({
@@ -860,50 +860,135 @@ export class ChatService {
 
     const allSessionIds = userSessionIds.map((s: { sessionId: string }) => s.sessionId);
     if (allSessionIds.length === 0) {
-      return { results: [], total: 0, page: options.page, limit: options.limit };
+      return { sessions: [], results: [], total: 0, page: options.page, limit: options.limit };
     }
 
-    const where: any = {
-      sessionId: options.sessionId || { in: allSessionIds },
-      isRecalled: false,
-      content: { contains: query, mode: 'insensitive' },
-    };
+    const searchClause = options.sessionId
+      ? `m.session_id = $2`
+      : `m.session_id = ANY($2::uuid[])`;
 
-    if (options.types?.length) {
-      where.contentType = { in: options.types };
+    const searchParams: any[] = [query];
+    if (options.sessionId) {
+      searchParams.push(options.sessionId);
+    } else {
+      searchParams.push(allSessionIds);
     }
 
-    const [total, messages] = await Promise.all([
-      this.prisma.message.count({ where }),
-      this.prisma.message.findMany({
-        where,
-        include: {
-          sender: {
-            select: { id: true, username: true, avatarUrl: true, nickname: true },
-          },
-          session: {
-            select: { id: true, name: true, sessionType: true },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (options.page - 1) * options.limit,
-        take: options.limit,
-      }),
-    ]);
+    let page = options.page || 1;
+    let limit = options.limit || 20;
+    let offset = (page - 1) * limit;
 
+    let messages: any[];
+    let total: number;
+
+    // Try PostgreSQL full-text search first, fall back to ILIKE
+    try {
+      const countResult: any[] = await this.prisma.$queryRawUnsafe(`
+        SELECT COUNT(*) as total
+        FROM messages m
+        WHERE ${searchClause}
+          AND NOT m.is_recalled
+          AND (m.content_type IS NULL OR m.content_type = 'text')
+          AND m.content ILIKE '%' || $1 || '%'
+      `, ...searchParams);
+
+      total = parseInt(countResult[0]?.total || '0', 10);
+
+      messages = await this.prisma.$queryRawUnsafe(`
+        SELECT
+          m.id, m.content, m.content_type as "contentType",
+          m.created_at as "createdAt",
+          m.session_id as "sessionId",
+          jsonb_build_object(
+            'id', u.id,
+            'username', u.username,
+            'avatar_url', u.avatar_url,
+            'nickname', u.nickname
+          ) as sender,
+          jsonb_build_object(
+            'id', s.id,
+            'name', s.name,
+            'session_type', s.session_type
+          ) as session
+        FROM messages m
+        LEFT JOIN users u ON u.id = m.sender_id
+        LEFT JOIN chat_sessions s ON s.id = m.session_id
+        WHERE ${searchClause}
+          AND NOT m.is_recalled
+          AND (m.content_type IS NULL OR m.content_type = 'text')
+          AND m.content ILIKE '%' || $1 || '%'
+        ORDER BY m.created_at DESC
+        LIMIT $3 OFFSET $4
+      `, ...searchParams, limit, offset);
+    } catch (err) {
+      this.logger.warn(`Full-text search raw query failed, using Prisma: ${err.message}`);
+      // Fallback to Prisma ILIKE
+      const where: any = {
+        sessionId: options.sessionId ? options.sessionId : { in: allSessionIds },
+        isRecalled: false,
+        contentType: 'text',
+        content: { contains: query, mode: 'insensitive' },
+      };
+
+      [total, messages] = await Promise.all([
+        this.prisma.message.count({ where }),
+        this.prisma.message.findMany({
+          where,
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            session: { select: { id: true, name: true, sessionType: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: offset,
+          take: limit,
+        }),
+      ]);
+    }
+
+    // Build flat results with highlights
     const results = messages.map((msg: any) => ({
       message: {
         id: msg.id,
         content: msg.content,
-        contentType: msg.contentType,
+        contentType: msg.contentType || 'text',
         createdAt: msg.createdAt,
-        sender: msg.sender,
+        sender: msg.sender || msg.sender || {},
       },
-      session: msg.session,
+      session: msg.session || { id: msg.sessionId },
       highlight: this.buildHighlight(msg.content, query),
     }));
 
-    return { results, total, page: options.page, limit: options.limit };
+    // Group by session with metadata
+    const sessionMap = new Map<string, {
+      session: any;
+      messages: typeof results;
+      matchCount: number;
+      lastMessageAt: string;
+    }>();
+
+    for (const r of results) {
+      const sid = r.session.id;
+      if (!sessionMap.has(sid)) {
+        sessionMap.set(sid, {
+          session: r.session,
+          messages: [],
+          matchCount: 0,
+          lastMessageAt: '',
+        });
+      }
+      const group = sessionMap.get(sid)!;
+      group.messages.push(r);
+      group.matchCount++;
+      if (r.message.createdAt > group.lastMessageAt) {
+        group.lastMessageAt = r.message.createdAt;
+      }
+    }
+
+    // Sort sessions by most recent match first
+    const sessions = Array.from(sessionMap.values())
+      .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+
+    return { sessions, results, total, page, limit };
   }
 
   private buildHighlight(content: string, query: string): string {

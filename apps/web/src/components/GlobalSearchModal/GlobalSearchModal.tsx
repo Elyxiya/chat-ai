@@ -3,20 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import { chatApi } from '@/api/client';
 import { useChatStore } from '@/stores/chat.store';
 
-interface SearchResult {
-  message: {
-    id: string;
-    content: string;
-    contentType: string;
-    createdAt: string;
-    sender: { id: string; username: string; avatarUrl?: string | null; nickname?: string | null };
-  };
-  session: { id: string; name: string | null; sessionType: string };
+interface SearchMessage {
+  id: string;
+  content: string;
+  contentType: string;
+  createdAt: string;
+  sender: { id: string; username: string; avatarUrl?: string | null; nickname?: string | null };
+}
+
+interface SearchSession {
+  id: string;
+  name: string | null;
+  sessionType: string;
+}
+
+interface FlatResult {
+  message: SearchMessage;
+  session: SearchSession;
   highlight: string;
 }
 
+interface SearchSessionGroup {
+  session: SearchSession;
+  messages: FlatResult[];
+  matchCount: number;
+  lastMessageAt: string;
+}
+
 interface GlobalSearchResponse {
-  results: SearchResult[];
+  sessions: SearchSessionGroup[];
+  results: FlatResult[];
   total: number;
   page: number;
   limit: number;
@@ -26,34 +42,31 @@ export default function GlobalSearchModal({ onClose }: { onClose: () => void }) 
   const navigate = useNavigate();
   const { setActiveSession } = useChatStore();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [sessions, setSessions] = useState<SearchSessionGroup[]>([]);
+  const [results, setResults] = useState<FlatResult[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const groupedResults = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-    const key = r.session.id;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(r);
-    return acc;
-  }, {});
-
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
+      setSessions([]);
       setResults([]);
       setTotal(0);
       return;
     }
     setLoading(true);
     try {
-      const res = await chatApi.globalSearch({ q, limit: 20 });
-      const data = res as unknown as GlobalSearchResponse;
+      const res = await chatApi.globalSearch({ q, limit: 30 });
+      const data = res.data as unknown as GlobalSearchResponse;
+      setSessions(data.sessions || []);
       setResults(data.results || []);
       setTotal(data.total || 0);
       setSelectedIdx(-1);
     } catch {
+      setSessions([]);
       setResults([]);
       setTotal(0);
     } finally {
@@ -77,6 +90,7 @@ export default function GlobalSearchModal({ onClose }: { onClose: () => void }) 
     onClose();
   };
 
+  // Build flat list from sessions for keyboard navigation
   const flatResults = results;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -106,10 +120,27 @@ export default function GlobalSearchModal({ onClose }: { onClose: () => void }) 
     );
   };
 
-  const getSessionLabel = (session: { name: string | null; sessionType: string; id: string }) => {
-    if (session.name) return session.name;
-    const members = session.id; // fallback
-    return session.sessionType === 'private' ? 'Private Chat' : 'Group';
+  const getSessionIcon = (type: string) => {
+    switch (type) {
+      case 'group':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        );
+      case 'channel':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        );
+    }
   };
 
   return (
@@ -144,29 +175,33 @@ export default function GlobalSearchModal({ onClose }: { onClose: () => void }) 
             </div>
           )}
 
-          {!loading && query && flatResults.length === 0 && (
+          {!loading && query && results.length === 0 && (
             <div className="py-8 text-center text-text-secondary text-sm">
               <p>No messages found for "<span className="font-medium text-text">{query}</span>"</p>
               <p className="mt-1 text-xs">Try different keywords or check your search spelling</p>
             </div>
           )}
 
-          {!loading && flatResults.length > 0 && (
+          {!loading && results.length > 0 && (
             <>
-              <div className="px-4 py-2 text-xs text-text-secondary border-b border-border">
-                {total} result{total !== 1 ? 's' : ''} for "<span className="font-medium text-text">{query}</span>"
+              <div className="px-4 py-2 text-xs text-text-secondary border-b border-border flex items-center justify-between">
+                <span>{total} result{total !== 1 ? 's' : ''} for "<span className="font-medium text-text">{query}</span>"</span>
+                <span className="text-text-secondary">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
               </div>
-              {Object.entries(groupedResults).map(([sessionId, msgs]) => (
-                <div key={sessionId}>
-                  <div className="px-4 py-1.5 text-xs font-medium text-text-secondary bg-bg/50 sticky top-0">
-                    {getSessionLabel(msgs[0].session)}
+              {sessions.map((group) => (
+                <div key={group.session.id}>
+                  {/* Session header */}
+                  <div className="px-4 py-1.5 text-xs font-medium text-text-secondary bg-bg/50 sticky top-0 flex items-center gap-1.5">
+                    <span className="opacity-60">{getSessionIcon(group.session.sessionType)}</span>
+                    <span>{group.session.name || (group.session.sessionType === 'private' ? 'Private Chat' : 'Group')}</span>
+                    <span className="ml-auto text-[10px] opacity-60">{group.matchCount} match{group.matchCount !== 1 ? 'es' : ''}</span>
                   </div>
-                  {msgs.map((item, i) => {
-                    const globalIdx = flatResults.indexOf(item);
+                  {group.messages.map((item) => {
+                    const globalIdx = results.indexOf(item);
                     return (
                       <button
                         key={item.message.id}
-                        onClick={() => handleSelect(sessionId)}
+                        onClick={() => handleSelect(group.session.id)}
                         className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-border/50 transition-colors ${
                           globalIdx === selectedIdx ? 'bg-primary-500/10 border-l-2 border-primary-500' : 'border-l-2 border-transparent'
                         }`}
