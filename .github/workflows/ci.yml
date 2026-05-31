@@ -9,7 +9,7 @@ on:
       - 'docs/**'
       - 'db/**'
       - 'docker/**'
-      - 'pnpm-*.yaml'
+      - 'pnpm-lock.yaml'
       - '.dockerignore'
       - '.env.example'
   pull_request:
@@ -20,7 +20,7 @@ on:
       - 'docs/**'
       - 'db/**'
       - 'docker/**'
-      - 'pnpm-*.yaml'
+      - 'pnpm-lock.yaml'
       - '.dockerignore'
       - '.env.example'
 
