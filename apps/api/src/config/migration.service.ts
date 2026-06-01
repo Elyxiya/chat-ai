@@ -20,45 +20,38 @@ export class MigrationService implements OnModuleInit {
   private splitStatements(sql: string): string[] {
     const statements: string[] = [];
     let current = '';
-    let inDollar = false;
-    let dollarTag = '';
 
     for (let i = 0; i < sql.length; i++) {
       const ch = sql[i];
 
-      if (!inDollar && ch === '$' && i + 1 < sql.length && sql[i + 1] === '$') {
-        // Start of unlabeled dollar quote
-        inDollar = true;
-        dollarTag = '';
-        current += '$$';
-        i++; // skip second $
+      // Handle single-line comments: skip to end of line
+      if (ch === '-' && sql[i + 1] === '-') {
+        current += '--';
+        i++;
+        while (i + 1 < sql.length && sql[i + 1] !== '\n') {
+          current += sql[++i];
+        }
         continue;
       }
 
-      if (inDollar) {
-        current += ch;
-        // Check for end of dollar quote: $tag$
-        if (ch === '$') {
-          // Look backwards for the matching tag
-          if (dollarTag === '') {
-            // Unlabeled $$ - check if this is the closing $$
-            inDollar = false;
-            dollarTag = '';
-          } else {
-            // Check if the accumulated tag matches
-            const matchTag = dollarTag;
-            if (current.endsWith('$' + matchTag + '$')) {
-              inDollar = false;
-              dollarTag = '';
-            }
+      // Handle $$ dollar-quoting (e.g., function bodies)
+      if (ch === '$' && sql[i + 1] === '$') {
+        current += '$$';
+        i++;
+        // Find closing $$
+        while (i + 1 < sql.length) {
+          i++;
+          current += sql[i];
+          if (sql[i] === '$' && sql[i + 1] === '$') {
+            current += '$';
+            i++;
+            break;
           }
         }
-        if (ch !== '$' && dollarTag === '' && inDollar) {
-          // Building the tag after $$ (e.g., $func$)
-        }
         continue;
       }
 
+      // Statement separator
       if (ch === ';') {
         const trimmed = current.trim();
         if (trimmed) {
@@ -71,7 +64,6 @@ export class MigrationService implements OnModuleInit {
       current += ch;
     }
 
-    // Last statement
     const trimmed = current.trim();
     if (trimmed) {
       statements.push(trimmed);
@@ -120,8 +112,9 @@ export class MigrationService implements OnModuleInit {
       const sql = fs.readFileSync(filePath, 'utf-8');
 
       // Split into statements, respecting $$ dollar-quoting
+      // Comments (--, /* */) are left inline — PostgreSQL handles them
       const statements = this.splitStatements(sql)
-        .filter((s) => !s.startsWith('--') && !s.startsWith('/*'));
+        .filter((s) => s.trim().length > 0);
 
       this.logger.log(`Applying migration: ${file} (${statements.length} statements)`);
 
