@@ -83,4 +83,56 @@ describe('api/client', () => {
       expect(typeof noAuthClient.post).toBe('function');
     });
   });
+
+  describe('request interceptor', () => {
+    it('API-WEB-06: should add auth header when token exists', async () => {
+      const mockGetState = vi.fn().mockReturnValue({ accessToken: 'my-token' });
+      (useAuthStore.getState as any) = mockGetState;
+
+      const { apiClient } = await import('./client');
+      const config: any = { headers: {} };
+      const requestHandler = (apiClient as any).interceptors.request.handlers[0]?.fulfilled;
+
+      if (requestHandler) {
+        const result = await requestHandler(config);
+        expect(result.headers.Authorization).toBe('Bearer my-token');
+      }
+    });
+
+    it('API-WEB-07: should not add auth header when no token', async () => {
+      const mockGetState = vi.fn().mockReturnValue({ accessToken: null });
+      (useAuthStore.getState as any) = mockGetState;
+
+      const { apiClient } = await import('./client');
+      const config: any = { headers: {} };
+      const requestHandler = (apiClient as any).interceptors.request.handlers[0]?.fulfilled;
+
+      if (requestHandler) {
+        const result = await requestHandler(config);
+        expect(result.headers.Authorization).toBeUndefined();
+      }
+    });
+  });
+
+  describe('response interceptor', () => {
+    it('API-WEB-08: should reject non-401 errors without refresh', async () => {
+      const { apiClient } = await import('./client');
+      const errorHandler = (apiClient as any).interceptors.response.handlers[0]?.rejected;
+
+      if (errorHandler) {
+        const error = { response: { status: 400 } };
+        await expect(errorHandler(error)).rejects.toEqual(error);
+      }
+    });
+
+    it('API-WEB-09: should reject error without response', async () => {
+      const { apiClient } = await import('./client');
+      const errorHandler = (apiClient as any).interceptors.response.handlers[0]?.rejected;
+
+      if (errorHandler) {
+        const error = new Error('Network error');
+        await expect(errorHandler(error)).rejects.toThrow('Network error');
+      }
+    });
+  });
 });
