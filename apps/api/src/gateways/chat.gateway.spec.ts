@@ -516,4 +516,164 @@ describe('ChatGateway', () => {
       expect(socket.join).not.toHaveBeenCalled();
     });
   });
+
+  describe('WebRTC Call Signaling', () => {
+    const createCallerSocket = () => createMockSocket({
+      id: 'caller-socket',
+      data: { user: { id: 'caller-1', username: 'caller', avatarUrl: null, status: 'online', userType: 'human' } },
+    });
+
+    const createCalleeSocket = () => createMockSocket({
+      id: 'callee-socket',
+      data: { user: { id: 'callee-1', username: 'callee', avatarUrl: null, status: 'online', userType: 'human' } },
+    });
+
+    const setupConnectedUsers = () => {
+      (gateway as any).userSockets.set('callee-1', new Set(['callee-socket']));
+      (gateway as any).userSockets.set('caller-1', new Set(['caller-socket']));
+    };
+
+    it('CALL-01: should emit call:incoming to target user sockets on call:offer', async () => {
+      setupConnectedUsers();
+      const socket = createCallerSocket();
+
+      await gateway.handleCallOffer(
+        { targetUserId: 'callee-1', sdp: { type: 'offer', sdp: 'test-sdp' }, callType: 'video' },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:incoming', expect.objectContaining({
+        callerId: 'caller-1',
+        callerName: 'caller',
+        callType: 'video',
+      }));
+    });
+
+    it('CALL-02: should emit call:ended when target user is offline', async () => {
+      const socket = createCallerSocket();
+      // Don't set up callee sockets → offline
+
+      const clientEmit = jest.fn();
+      socket.emit = clientEmit;
+
+      await gateway.handleCallOffer(
+        { targetUserId: 'callee-1', sdp: {}, callType: 'audio' },
+        socket,
+      );
+
+      expect(clientEmit).toHaveBeenCalledWith('call:ended', {
+        userId: 'callee-1',
+        reason: 'offline',
+      });
+    });
+
+    it('CALL-03: should emit call:accepted to caller on call:answer', async () => {
+      setupConnectedUsers();
+      const socket = createCalleeSocket();
+
+      await gateway.handleCallAnswer(
+        { targetUserId: 'caller-1', sdp: { type: 'answer', sdp: 'answer-sdp' } },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('caller-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:accepted', expect.objectContaining({
+        calleeId: 'callee-1',
+      }));
+    });
+
+    it('CALL-04: should do nothing on call:answer when caller is offline', async () => {
+      const socket = createCalleeSocket();
+
+      await gateway.handleCallAnswer(
+        { targetUserId: 'caller-1', sdp: {} },
+        socket,
+      );
+
+      // No call:accepted emitted since caller has no sockets
+      expect(gateway.server.to).not.toHaveBeenCalledWith('caller-socket');
+    });
+
+    it('CALL-05: should forward ICE candidate to target', async () => {
+      setupConnectedUsers();
+      const socket = createCallerSocket();
+
+      await gateway.handleIceCandidate(
+        { targetUserId: 'callee-1', candidate: { candidate: 'test-ice', sdpMid: '0' } },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:ice-candidate', {
+        userId: 'caller-1',
+        candidate: { candidate: 'test-ice', sdpMid: '0' },
+      });
+    });
+
+    it('CALL-06: should do nothing on ICE candidate when target offline', async () => {
+      const socket = createCallerSocket();
+
+      await gateway.handleIceCandidate(
+        { targetUserId: 'callee-1', candidate: {} },
+        socket,
+      );
+
+      expect(gateway.server.to).not.toHaveBeenCalled();
+    });
+
+    it('CALL-07: should emit call:ended with reject reason on call:reject', async () => {
+      setupConnectedUsers();
+      const socket = createCalleeSocket();
+
+      await gateway.handleCallReject({ targetUserId: 'caller-1' }, socket);
+
+      expect(gateway.server.to).toHaveBeenCalledWith('caller-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:ended', {
+        userId: 'callee-1',
+        reason: 'reject',
+      });
+    });
+
+    it('CALL-08: should emit call:ended with hangup reason on call:end', async () => {
+      setupConnectedUsers();
+      const socket = createCallerSocket();
+
+      await gateway.handleCallEnd({ targetUserId: 'callee-1' }, socket);
+
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:ended', {
+        userId: 'caller-1',
+        reason: 'hangup',
+      });
+    });
+
+    it('CALL-09: should forward toggle event to target', async () => {
+      setupConnectedUsers();
+      const socket = createCallerSocket();
+
+      await gateway.handleCallToggle(
+        { targetUserId: 'callee-1', type: 'audio', enabled: false },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket');
+      expect(gateway.server.emit).toHaveBeenCalledWith('call:toggle', {
+        userId: 'caller-1',
+        type: 'audio',
+        enabled: false,
+      });
+    });
+
+    it('CALL-10: should do nothing on call:toggle when target offline', async () => {
+      const socket = createCallerSocket();
+
+      await gateway.handleCallToggle(
+        { targetUserId: 'callee-1', type: 'video', enabled: true },
+        socket,
+      );
+
+      expect(gateway.server.to).not.toHaveBeenCalled();
+    });
+  });
 });
