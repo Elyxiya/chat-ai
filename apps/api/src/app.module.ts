@@ -17,6 +17,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
+import { MigrationService } from './config/migration.service';
 
 const ENV_PATH = path.join(__dirname, '..', '..', '..', '.env');
 
@@ -56,6 +57,7 @@ const ENV_PATH = path.join(__dirname, '..', '..', '..', '.env');
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
     },
+    MigrationService,
   ],
 })
 export class AppModule {}

@@ -881,15 +881,18 @@ export class ChatService {
     let messages: any[];
     let total: number;
 
-    // Try PostgreSQL full-text search first, fall back to ILIKE
+    // Try PostgreSQL tsvector full-text search first
     try {
+      const tsQuery = query.replace(/[^\w\s一-鿿]/g, ' ').trim();
+      if (!tsQuery) throw new Error('Empty query after sanitization');
+
       const countResult: any[] = await this.prisma.$queryRawUnsafe(`
         SELECT COUNT(*) as total
         FROM messages m
-        WHERE ${searchClause}
+        WHERE ${searchClause.replace('$1', '$1::tsquery')}
           AND NOT m.is_recalled
           AND (m.content_type IS NULL OR m.content_type = 'text')
-          AND m.content ILIKE '%' || $1 || '%'
+          AND m.search_vector @@ plainto_tsquery('simple', $1)
       `, ...searchParams);
 
       total = parseInt(countResult[0]?.total || '0', 10);
@@ -899,6 +902,7 @@ export class ChatService {
           m.id, m.content, m.content_type as "contentType",
           m.created_at as "createdAt",
           m.session_id as "sessionId",
+          ts_rank(m.search_vector, plainto_tsquery('simple', $1)) as relevance,
           jsonb_build_object(
             'id', u.id,
             'username', u.username,
@@ -916,33 +920,79 @@ export class ChatService {
         WHERE ${searchClause}
           AND NOT m.is_recalled
           AND (m.content_type IS NULL OR m.content_type = 'text')
-          AND m.content ILIKE '%' || $1 || '%'
+          AND m.search_vector @@ plainto_tsquery('simple', $1)
         ORDER BY m.created_at DESC
         LIMIT $3 OFFSET $4
       `, ...searchParams, limit, offset);
     } catch (err) {
-      this.logger.warn(`Full-text search raw query failed, using Prisma: ${err.message}`);
-      // Fallback to Prisma ILIKE
-      const where: any = {
-        sessionId: options.sessionId ? options.sessionId : { in: allSessionIds },
-        isRecalled: false,
-        contentType: 'text',
-        content: { contains: query, mode: 'insensitive' },
-      };
+      // Fallback to raw SQL ILIKE (tsvector column may not exist yet)
+      try {
+        this.logger.warn(`tsvector search failed, falling back to ILIKE: ${err.message}`);
+        const countResult: any[] = await this.prisma.$queryRawUnsafe(`
+          SELECT COUNT(*) as total
+          FROM messages m
+          WHERE ${searchClause}
+            AND NOT m.is_recalled
+            AND (m.content_type IS NULL OR m.content_type = 'text')
+            AND m.content ILIKE '%' || $1 || '%'
+        `, ...searchParams);
 
-      [total, messages] = await Promise.all([
-        this.prisma.message.count({ where }),
-        this.prisma.message.findMany({
-          where,
-          include: {
-            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
-            session: { select: { id: true, name: true, sessionType: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-          skip: offset,
-          take: limit,
-        }),
-      ]);
+        total = parseInt(countResult[0]?.total || '0', 10);
+
+        messages = await this.prisma.$queryRawUnsafe(`
+          SELECT
+            m.id, m.content, m.content_type as "contentType",
+            m.created_at as "createdAt",
+            m.session_id as "sessionId",
+            0 as relevance,
+            jsonb_build_object(
+              'id', u.id,
+              'username', u.username,
+              'avatar_url', u.avatar_url,
+              'nickname', u.nickname
+            ) as sender,
+            jsonb_build_object(
+              'id', s.id,
+              'name', s.name,
+              'session_type', s.session_type
+            ) as session
+          FROM messages m
+          LEFT JOIN users u ON u.id = m.sender_id
+          LEFT JOIN chat_sessions s ON s.id = m.session_id
+          WHERE ${searchClause}
+            AND NOT m.is_recalled
+            AND (m.content_type IS NULL OR m.content_type = 'text')
+            AND m.content ILIKE '%' || $1 || '%'
+          ORDER BY m.created_at DESC
+          LIMIT $3 OFFSET $4
+        `, ...searchParams, limit, offset);
+      } catch (err2) {
+        this.logger.warn(`ILIKE raw query also failed, using Prisma: ${err2.message}`);
+        // Final fallback to Prisma ILIKE
+        const where: any = {
+          sessionId: options.sessionId ? options.sessionId : { in: allSessionIds },
+          isRecalled: false,
+          contentType: 'text',
+          content: { contains: query, mode: 'insensitive' },
+        };
+
+        [total, messages] = await Promise.all([
+          this.prisma.message.count({ where }),
+          this.prisma.message.findMany({
+            where,
+            include: {
+              sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+              session: { select: { id: true, name: true, sessionType: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+            skip: offset,
+            take: limit,
+          }),
+        ]);
+
+        // Add relevance field for consistency
+        messages = (messages as any[]).map((m: any) => ({ ...m, relevance: 0 }));
+      }
     }
 
     // Build flat results with highlights

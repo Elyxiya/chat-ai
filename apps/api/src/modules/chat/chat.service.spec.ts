@@ -71,6 +71,8 @@ describe('ChatService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      $queryRawUnsafe: jest.fn().mockRejectedValue(new Error('tsvector column not available')),
+      $executeRawUnsafe: jest.fn().mockResolvedValue([{ total: 0 }]),
     };
 
     mockRedis = {
@@ -1245,6 +1247,114 @@ describe('ChatService', () => {
       const result = await service.searchBookmarksByTag('user-1', 'work');
       expect(result[0].tags).toEqual(['work']);
       expect(result[0].note).toBe('My note');
+    });
+  });
+
+  describe('globalSearch', () => {
+    const mockMessages = [
+      {
+        id: 'msg-1',
+        content: 'meeting at 3pm tomorrow',
+        contentType: 'text',
+        createdAt: '2025-01-15T10:00:00Z',
+        sessionId: 'session-1',
+        relevance: 0.5,
+        sender: { id: 'user-2', username: 'Alice', avatar_url: null, nickname: null },
+        session: { id: 'session-1', name: 'Work Chat', session_type: 'group' },
+      },
+    ];
+
+    beforeEach(() => {
+      mockPrisma.chatSessionMember.findMany.mockResolvedValue([
+        { sessionId: 'session-1' },
+        { sessionId: 'session-2' },
+      ]);
+    });
+
+    it('TSV-01: should return empty results for empty query', async () => {
+      const result = await service.globalSearch('user-1', '', { page: 1, limit: 20 });
+      expect(result.total).toBe(0);
+      expect(result.results).toEqual([]);
+    });
+
+    it('TSV-02: should fall back to ILIKE when tsvector fails', async () => {
+      // tsvector count fails → catch → ILIKE raw SQL succeeds
+      mockPrisma.$queryRawUnsafe
+        .mockRejectedValueOnce(new Error('column search_vector does not exist')) // tsvector count
+        .mockResolvedValueOnce([{ total: 1 }]) // ILIKE count
+        .mockResolvedValueOnce(mockMessages); // ILIKE query
+
+      const result = await service.globalSearch('user-1', 'meeting', { page: 1, limit: 20 });
+      expect(result.total).toBe(1);
+      expect(result.results[0].message.content).toContain('meeting');
+    });
+
+    it('TSV-03: should return empty results when user has no sessions', async () => {
+      mockPrisma.chatSessionMember.findMany.mockResolvedValue([]);
+      const result = await service.globalSearch('user-1', 'meeting', { page: 1, limit: 20 });
+      expect(result.total).toBe(0);
+    });
+
+    it('TSV-04: should group results by session', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockRejectedValueOnce(new Error('tsvector fail')) // tsvector count
+        .mockResolvedValueOnce([{ total: 2 }]) // ILIKE count
+        .mockResolvedValueOnce([
+          ...mockMessages,
+          {
+            ...mockMessages[0],
+            id: 'msg-2',
+            content: 'team meeting agenda',
+            sessionId: 'session-2',
+            session: { id: 'session-2', name: 'Team Chat', session_type: 'group' },
+          },
+        ]);
+
+      const result = await service.globalSearch('user-1', 'meeting', { page: 1, limit: 20 });
+      expect(result.sessions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('TSV-05: should apply sessionId filter when provided', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockRejectedValueOnce(new Error('tsvector fail'))
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce(mockMessages);
+
+      const result = await service.globalSearch('user-1', 'meeting', { sessionId: 'session-1', page: 1, limit: 20 });
+      expect(result.total).toBe(1);
+    });
+
+    it('TSV-06: should return Prisma fallback when both tsvector and raw ILIKE fail', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockRejectedValue(new Error('connection error')); // all raw queries fail
+
+      mockPrisma.message.count.mockResolvedValue(1);
+      mockPrisma.message.findMany.mockResolvedValue([
+        {
+          id: 'msg-1',
+          content: 'meeting at 3pm',
+          contentType: 'text',
+          createdAt: '2025-01-15T10:00:00Z',
+          sessionId: 'session-1',
+          sender: { id: 'user-2', username: 'Alice', avatarUrl: null, nickname: null },
+          session: { id: 'session-1', name: 'Work Chat', sessionType: 'group' },
+        },
+      ]);
+
+      const result = await service.globalSearch('user-1', 'meeting', { page: 1, limit: 20 });
+      expect(result.total).toBe(1);
+      expect(mockPrisma.message.findMany).toHaveBeenCalled();
+    });
+
+    it('TSV-07: should handle pagination', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockRejectedValueOnce(new Error('tsvector fail'))
+        .mockResolvedValueOnce([{ total: 10 }])
+        .mockResolvedValueOnce(mockMessages);
+
+      const result = await service.globalSearch('user-1', 'meeting', { page: 2, limit: 5 });
+      expect(result.page).toBe(2);
+      expect(result.limit).toBe(5);
     });
   });
 });
