@@ -1,6 +1,11 @@
 -- ============================================
 -- Migration 001: PostgreSQL Full-Text Search (tsvector)
 -- Adds tsvector column, GIN index, and auto-update trigger
+--
+-- NOTE: This migration only runs if the `messages` table exists.
+-- If the table doesn't exist yet (Prisma schema not synced),
+-- the MigrationService skips it gracefully. The app continues
+-- with ILIKE fallback search.
 -- ============================================
 
 -- Step 1: Add search_vector column to messages table
