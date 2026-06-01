@@ -13,6 +13,73 @@ export class MigrationService implements OnModuleInit {
     await this.runPendingMigrations();
   }
 
+  /**
+   * Split SQL into statements, respecting $$ dollar-quoting blocks
+   * (so semicolons inside function bodies are NOT treated as statement separators).
+   */
+  private splitStatements(sql: string): string[] {
+    const statements: string[] = [];
+    let current = '';
+    let inDollar = false;
+    let dollarTag = '';
+
+    for (let i = 0; i < sql.length; i++) {
+      const ch = sql[i];
+
+      if (!inDollar && ch === '$' && i + 1 < sql.length && sql[i + 1] === '$') {
+        // Start of unlabeled dollar quote
+        inDollar = true;
+        dollarTag = '';
+        current += '$$';
+        i++; // skip second $
+        continue;
+      }
+
+      if (inDollar) {
+        current += ch;
+        // Check for end of dollar quote: $tag$
+        if (ch === '$') {
+          // Look backwards for the matching tag
+          if (dollarTag === '') {
+            // Unlabeled $$ - check if this is the closing $$
+            inDollar = false;
+            dollarTag = '';
+          } else {
+            // Check if the accumulated tag matches
+            const matchTag = dollarTag;
+            if (current.endsWith('$' + matchTag + '$')) {
+              inDollar = false;
+              dollarTag = '';
+            }
+          }
+        }
+        if (ch !== '$' && dollarTag === '' && inDollar) {
+          // Building the tag after $$ (e.g., $func$)
+        }
+        continue;
+      }
+
+      if (ch === ';') {
+        const trimmed = current.trim();
+        if (trimmed) {
+          statements.push(trimmed);
+        }
+        current = '';
+        continue;
+      }
+
+      current += ch;
+    }
+
+    // Last statement
+    const trimmed = current.trim();
+    if (trimmed) {
+      statements.push(trimmed);
+    }
+
+    return statements;
+  }
+
   async runPendingMigrations() {
     const migrationsDir = path.join(__dirname, '..', '..', 'prisma', 'migrations');
     if (!fs.existsSync(migrationsDir)) {
@@ -52,19 +119,16 @@ export class MigrationService implements OnModuleInit {
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf-8');
 
-      // Split into individual statements, filter comments
-      const statements = sql
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith('--') && !s.startsWith('/*'));
+      // Split into statements, respecting $$ dollar-quoting
+      const statements = this.splitStatements(sql)
+        .filter((s) => !s.startsWith('--') && !s.startsWith('/*'));
 
       this.logger.log(`Applying migration: ${file} (${statements.length} statements)`);
 
       try {
-        // Try to execute the migration
         for (const stmt of statements) {
-          if (stmt) {
-            await this.prisma.$executeRawUnsafe(`${stmt};`);
+          if (stmt.trim()) {
+            await this.prisma.$executeRawUnsafe(stmt);
           }
         }
 
@@ -84,7 +148,6 @@ export class MigrationService implements OnModuleInit {
       } catch (err) {
         const msg = err.message || String(err);
         if (msg.includes('does not exist') || msg.includes('relation') || msg.includes('42P01')) {
-          // Relation not found — Prisma schema hasn't been synced yet
           this.logger.warn(
             `Migration ${file} deferred: referenced tables do not exist yet. ` +
             `Run 'pnpm db:push' first to sync Prisma schema, then restart the app. ` +
@@ -93,7 +156,6 @@ export class MigrationService implements OnModuleInit {
         } else {
           this.logger.error(`Migration ${file} failed: ${msg}`);
         }
-        // Don't throw — app continues with ILIKE fallback
       }
     }
   }
