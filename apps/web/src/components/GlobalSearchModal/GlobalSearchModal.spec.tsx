@@ -116,4 +116,27 @@ describe('GlobalSearchModal', () => {
     }, { timeout: 2000 });
     expect(screen.getByText(/1 session/)).toBeInTheDocument();
   });
+
+  it('SEARCH-WEB-09: should handle API failure gracefully', async () => {
+    mockGlobalSearch.mockRejectedValue(new Error('Network error'));
+    render(<GlobalSearchModal onClose={onClose} />);
+    fireEvent.change(screen.getByPlaceholderText('Search messages across all chats...'), { target: { value: 'meeting' } });
+    await waitFor(() => {
+      // Should show no results state, not crash
+      expect(screen.getByText(/No messages found/)).toBeInTheDocument();
+    }, { timeout: 2000 });
+  });
+
+  it('SEARCH-WEB-10: should handle rapid typing without excessive API calls', async () => {
+    render(<GlobalSearchModal onClose={onClose} />);
+    const input = screen.getByPlaceholderText('Search messages across all chats...');
+    // Type rapidly (debounce should prevent multiple API calls)
+    fireEvent.change(input, { target: { value: 'a' } });
+    fireEvent.change(input, { target: { value: 'ab' } });
+    fireEvent.change(input, { target: { value: 'abc' } });
+    await waitFor(() => {
+      // Should only make 1 API call due to debounce
+      expect(mockGlobalSearch).toHaveBeenCalledTimes(1);
+    }, { timeout: 2000 });
+  });
 });

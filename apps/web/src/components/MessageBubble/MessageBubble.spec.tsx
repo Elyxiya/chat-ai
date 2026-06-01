@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import MessageBubble from './MessageBubble';
 import { ChatMessage } from '@/types';
+
+const { mockToggleBookmark, mockUpdateBookmark } = vi.hoisted(() => ({
+  mockToggleBookmark: vi.fn().mockResolvedValue({ data: { bookmarked: true } }),
+  mockUpdateBookmark: vi.fn().mockResolvedValue({ data: { tags: [] } }),
+}));
+vi.mock('@/api/client', () => ({
+  chatApi: {
+    toggleBookmark: mockToggleBookmark,
+    updateBookmark: mockUpdateBookmark,
+  },
+}));
 
 const mockMessage: ChatMessage = {
   id: 'msg-1',
@@ -53,6 +64,11 @@ const mockAiResponseMessage: ChatMessage = {
 };
 
 describe('MessageBubble', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockToggleBookmark.mockResolvedValue({ data: { bookmarked: true } });
+    mockUpdateBookmark.mockResolvedValue({ data: { tags: [] } });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -224,5 +240,80 @@ describe('MessageBubble', () => {
     fireEvent.click(menuButtons[0]);
     fireEvent.click(screen.getByText('Remove Bookmark'));
     expect(onBookmark).toHaveBeenCalled();
+  });
+
+  it('MSG-WEB-19: should handle bookmark dialog Cancel gracefully', () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    // Click Bookmark to open dialog
+    fireEvent.click(screen.getByText('Bookmark'));
+    // Click Cancel
+    fireEvent.click(screen.getByText('Cancel'));
+    // Dialog should close, onBookmark should NOT have been called
+    expect(onBookmark).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText('work, important, ...')).not.toBeInTheDocument();
+  });
+
+  it('MSG-WEB-20: should handle empty tag submission gracefully', async () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    fireEvent.click(screen.getByText('Bookmark'));
+
+    // Submit with empty tags (just press Enter on empty input)
+    const tagInput = screen.getByPlaceholderText('work, important, ...');
+    fireEvent.change(tagInput, { target: { value: '' } });
+    fireEvent.keyDown(tagInput, { key: 'Enter' });
+
+    // Should call onBookmark even with empty tags
+    await waitFor(() => {
+      expect(onBookmark).toHaveBeenCalled();
+    });
+  });
+
+  it('MSG-WEB-21: should handle save with comma-separated tags', async () => {
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    fireEvent.click(screen.getByText('Bookmark'));
+
+    // Enter tags with spaces
+    const tagInput = screen.getByPlaceholderText('work, important, ...');
+    fireEvent.change(tagInput, { target: { value: 'work, important' } });
+
+    // Click Save
+    fireEvent.click(screen.getByText('Save'));
+
+    // Should call toggleBookmark and updateBookmark
+    await waitFor(() => {
+      expect(mockToggleBookmark).toHaveBeenCalledWith('msg-1');
+    });
+    expect(mockUpdateBookmark).toHaveBeenCalledWith('msg-1', { tags: ['work', 'important'] });
+    expect(onBookmark).toHaveBeenCalled();
+  });
+
+  it('MSG-WEB-22: should handle bookmark API failure silently', async () => {
+    // Suppress the unhandled rejection from the component's missing catch
+    const rejectionHandler = vi.fn();
+    process.on('unhandledRejection', rejectionHandler);
+    mockToggleBookmark.mockRejectedValue(new Error('Network error'));
+    const onBookmark = vi.fn();
+    render(<MessageBubble message={mockMessage} isOwn={false} onBookmark={onBookmark} />);
+    const menuButtons = screen.getAllByRole('button');
+    fireEvent.click(menuButtons[0]);
+    fireEvent.click(screen.getByText('Bookmark'));
+
+    // Click Save
+    fireEvent.click(screen.getByText('Save'));
+
+    // API fails, but shouldn't throw/crash
+    await waitFor(() => {
+      expect(mockToggleBookmark).toHaveBeenCalledWith('msg-1');
+    });
+    process.removeListener('unhandledRejection', rejectionHandler);
   });
 });

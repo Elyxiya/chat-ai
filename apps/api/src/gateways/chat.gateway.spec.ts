@@ -675,5 +675,45 @@ describe('ChatGateway', () => {
 
       expect(gateway.server.to).not.toHaveBeenCalled();
     });
+
+    it('CALL-11: should handle call:offer to multiple target sockets', async () => {
+      // Simulate target connected from 2 devices
+      (gateway as any).userSockets.set('callee-1', new Set(['callee-socket', 'callee-socket-2']));
+      const socket = createCallerSocket();
+
+      await gateway.handleCallOffer(
+        { targetUserId: 'callee-1', sdp: {}, callType: 'audio' },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket');
+      expect(gateway.server.to).toHaveBeenCalledWith('callee-socket-2');
+    });
+
+    it('CALL-12: should handle concurrent call:offer and call:end', async () => {
+      setupConnectedUsers();
+      const socket = createCallerSocket();
+
+      // Simulate offer and immediate end
+      await Promise.all([
+        gateway.handleCallOffer({ targetUserId: 'callee-1', sdp: {}, callType: 'video' }, socket),
+        gateway.handleCallEnd({ targetUserId: 'callee-1' }, socket),
+      ]);
+
+      // Both operations should complete without error
+      expect(gateway.server.emit).toHaveBeenCalled();
+    });
+
+    it('CALL-13: should handle self-targeting call:offer gracefully', async () => {
+      const socket = createCallerSocket();
+      (gateway as any).userSockets.set('caller-1', new Set(['caller-socket']));
+
+      await gateway.handleCallOffer(
+        { targetUserId: 'caller-1', sdp: {}, callType: 'audio' },
+        socket,
+      );
+
+      expect(gateway.server.to).toHaveBeenCalledWith('caller-socket');
+    });
   });
 });

@@ -167,4 +167,55 @@ describe('BookmarkPanel', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/chat/session1');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('BOOK-WEB-11: should handle load failure gracefully', async () => {
+    mockGetBookmarks.mockRejectedValue(new Error('Network error'));
+    render(<BookmarkPanel onClose={onClose} />);
+    await waitFor(() => {
+      expect(screen.getByText('No bookmarks yet')).toBeInTheDocument();
+    });
+  });
+
+  it('BOOK-WEB-12: should handle remove failure gracefully', async () => {
+    mockToggleBookmark.mockRejectedValue(new Error('Network error'));
+    render(<BookmarkPanel onClose={onClose} />);
+    await waitFor(() => {
+      expect(screen.getByText('Meeting at 3pm tomorrow')).toBeInTheDocument();
+    });
+    // Remove button should still be present after failure
+    const removeBtns = screen.getAllByText('Remove');
+    fireEvent.click(removeBtns[0]);
+    // Should not crash, bookmark list should remain unchanged
+    await waitFor(() => {
+      expect(screen.getByText('Meeting at 3pm tomorrow')).toBeInTheDocument();
+    });
+  });
+
+  it('BOOK-WEB-13: should handle search failure gracefully', async () => {
+    mockSearchBookmarks.mockRejectedValue(new Error('Network error'));
+    render(<BookmarkPanel onClose={onClose} />);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Search bookmarks...')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByPlaceholderText('Search bookmarks...'), { target: { value: 'test' } });
+    // Should not crash after search failure
+    await waitFor(() => {
+      expect(screen.getByText('Meeting at 3pm tomorrow')).toBeInTheDocument();
+    });
+  });
+
+  it('BOOK-WEB-14: should handle tag filter interaction when search API is available', async () => {
+    mockSearchBookmarks.mockResolvedValue({ data: [mockBookmarks[1]] });
+    render(<BookmarkPanel onClose={onClose} />);
+    // Wait for initial load
+    await waitFor(() => {
+      expect(screen.getByText('Meeting at 3pm tomorrow')).toBeInTheDocument();
+    });
+    // Click the "All" filter button to reset active tag
+    const allBtn = screen.getByText('All');
+    fireEvent.click(allBtn);
+    await waitFor(() => {
+      expect(mockSearchBookmarks).toHaveBeenCalled();
+    });
+  });
 });

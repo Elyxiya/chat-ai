@@ -97,6 +97,38 @@ describe('FileParserService', () => {
       expect(result.content).toContain('Hello');
     });
   });
+
+  describe('Boundary cases', () => {
+    it('FILEPARSE-15: should handle empty extension filename', () => {
+      const file = makeFile({ originalname: 'noextension' });
+      expect(() => service.parse(file)).toThrow(BadRequestException);
+    });
+
+    it('FILEPARSE-16: should handle very long filename', () => {
+      const longName = 'a'.repeat(255) + '.txt';
+      const file = makeFile({ originalname: longName, buffer: Buffer.from('content') });
+      const result = service.parse(file);
+      expect(result.fileName).toBe(longName);
+    });
+
+    it('FILEPARSE-17: should handle exactly 10MB file (boundary)', () => {
+      const file = makeFile({ size: 10 * 1024 * 1024, buffer: Buffer.alloc(10 * 1024 * 1024, 'a') });
+      const result = service.parse(file);
+      expect(result.content).toBeDefined();
+    });
+
+    it('FILEPARSE-18: should handle exactly 10MB + 1 byte file (over limit)', () => {
+      const file = makeFile({ size: 10 * 1024 * 1024 + 1 });
+      expect(() => service.parse(file)).toThrow(BadRequestException);
+    });
+
+    it('FILEPARSE-19: should handle minimal text content (1 char)', () => {
+      const file = makeFile({ buffer: Buffer.from('a') });
+      const result = service.parse(file);
+      expect(result.content).toBe('a');
+    });
+  });
+
   describe('PDF parsing', () => {
     it('FILEPARSE-11: should extract text from simple PDF buffer', () => {
       // Create a buffer that mimics PDF text objects

@@ -674,5 +674,45 @@ describe('AuthService', () => {
       await expect(service.handleWechatCallback('auth-code'))
         .rejects.toThrow(BadRequestException);
     });
+
+    it('WECHAT-06: should generate URL without state when state is omitted', () => {
+      const url = service.getWechatAuthUrl();
+      expect(url).toContain('open.weixin.qq.com/connect/qrconnect');
+      expect(url).not.toContain('state=');
+    });
+
+    it('WECHAT-07: should handle WeChat nickname with special characters', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ ...mockWechatUser, nickname: 'User<>&"' }) });
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(null);
+      const newOAuthAccount = {
+        provider: 'wechat',
+        providerUserId: 'wechat-openid-12345',
+        user: makeUser({ id: 'new-wechat-user-id' }),
+      };
+      mockPrisma.oAuthAccount.create.mockResolvedValue(newOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleWechatCallback('auth-code');
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('WECHAT-08: should handle missing headimgurl from WeChat', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ ...mockWechatUser, headimgurl: undefined }) });
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(null);
+      const newOAuthAccount = {
+        provider: 'wechat',
+        providerUserId: 'wechat-openid-12345',
+        user: makeUser({ id: 'new-wechat-user-id' }),
+      };
+      mockPrisma.oAuthAccount.create.mockResolvedValue(newOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleWechatCallback('auth-code');
+      expect(result.user.avatarUrl).toBeNull();
+    });
   });
 });
