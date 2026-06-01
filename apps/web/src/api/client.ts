@@ -69,6 +69,10 @@ export const authApi = {
   me: () => apiClient.get('/auth/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiClient.post('/auth/change-password', { currentPassword, newPassword }),
+  wechatAuth: (state?: string) =>
+    noAuthClient.post('/auth/oauth/wechat', { state }),
+  wechatCallback: (code: string, state?: string) =>
+    noAuthClient.post('/auth/oauth/wechat/callback', { code, state }),
 };
 
 export const chatApi = {

@@ -326,6 +326,106 @@ export class AuthService {
     });
   }
 
+  getWechatAuthUrl(state?: string): string {
+    const appId = this.config.get('WECHAT_APP_ID');
+    const redirectUri = this.config.get('WECHAT_CALLBACK_URL');
+    const stateParam = state ? `&state=${state}` : '';
+    return `https://open.weixin.qq.com/connect/qrconnect?appid=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_login${stateParam}#wechat_redirect`;
+  }
+
+  async handleWechatCallback(code: string, _state?: string): Promise<AuthTokens> {
+    // Exchange code for access_token and openid
+    const tokenResponse = await fetch(
+      'https://api.weixin.qq.com/sns/oauth2/access_token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          appid: this.config.get('WECHAT_APP_ID') || '',
+          secret: this.config.get('WECHAT_APP_SECRET') || '',
+          code,
+          grant_type: 'authorization_code',
+        }),
+      },
+    ).then((r) => r.json()) as Record<string, any>;
+
+    if (tokenResponse.errcode) {
+      throw new BadRequestException(`WeChat OAuth failed: ${tokenResponse.errmsg || 'unknown error'}`);
+    }
+
+    const accessToken = tokenResponse.access_token;
+    const openid = tokenResponse.openid;
+
+    // Get user info from WeChat
+    const wechatUser = await fetch(
+      `https://api.weixin.qq.com/sns/userinfo?access_token=${accessToken}&openid=${openid}`,
+    ).then((r) => r.json()) as Record<string, any>;
+
+    if (wechatUser.errcode) {
+      throw new BadRequestException(`WeChat userinfo failed: ${wechatUser.errmsg || 'unknown error'}`);
+    }
+
+    // Find or create user
+    const existingAccount = await this.prisma.oAuthAccount.findUnique({
+      where: { provider_providerUserId: { provider: 'wechat', providerUserId: openid } },
+      include: { user: true },
+    });
+
+    if (existingAccount) {
+      // Update existing user's avatar and nickname if changed
+      await this.prisma.user.update({
+        where: { id: existingAccount.user.id },
+        data: {
+          nickname: wechatUser.nickname || existingAccount.user.nickname,
+          avatarUrl: wechatUser.headimgurl || existingAccount.user.avatarUrl,
+        },
+      });
+      const updatedUser = {
+        ...existingAccount.user,
+        nickname: wechatUser.nickname || existingAccount.user.nickname,
+        avatarUrl: wechatUser.headimgurl || existingAccount.user.avatarUrl,
+      };
+
+      return this.generateTokens({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        nickname: updatedUser.nickname,
+        avatarUrl: updatedUser.avatarUrl,
+        userType: updatedUser.userType,
+      });
+    }
+
+    // Create new user with WeChat account
+    const oauthAccount = await this.prisma.oAuthAccount.create({
+      data: {
+        provider: 'wechat',
+        providerUserId: openid,
+        accessToken,
+        user: {
+          create: {
+            username: `wechat_${openid.substring(0, 8)}`,
+            email: `wechat_${openid.substring(0, 8)}@wechat.com`,
+            passwordHash: await bcrypt.hash(uuidv4(), this.BCRYPT_ROUNDS),
+            nickname: wechatUser.nickname || 'WeChat User',
+            avatarUrl: wechatUser.headimgurl || null,
+            userType: 'human',
+          },
+        },
+      },
+      include: { user: true },
+    });
+
+    return this.generateTokens({
+      id: oauthAccount.user.id,
+      username: oauthAccount.user.username,
+      email: oauthAccount.user.email,
+      nickname: oauthAccount.user.nickname,
+      avatarUrl: oauthAccount.user.avatarUrl,
+      userType: oauthAccount.user.userType,
+    });
+  }
+
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');

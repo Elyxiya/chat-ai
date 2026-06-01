@@ -115,6 +115,20 @@ export class AuthController {
     return success(await this.authService.handleGoogleCallback(body.code, body.state));
   }
 
+  @Post('oauth/wechat')
+  @ApiOperation({ summary: 'Initiate WeChat OAuth flow' })
+  async wechatAuth(@Body() body: { state?: string }) {
+    const state = body.state || crypto.randomBytes(16).toString('hex');
+    return success({ url: this.authService.getWechatAuthUrl(state), state });
+  }
+
+  @Post('oauth/wechat/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'WeChat OAuth callback' })
+  async wechatCallback(@Body() body: { code: string; state?: string }) {
+    return success(await this.authService.handleWechatCallback(body.code, body.state));
+  }
+
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)

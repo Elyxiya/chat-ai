@@ -583,4 +583,96 @@ describe('AuthService', () => {
       expect(result1.refreshToken).not.toBe(result2.refreshToken);
     });
   });
+
+  describe('WeChat OAuth', () => {
+    const mockWechatTokenResponse = { access_token: 'wechat-access-token', openid: 'wechat-openid-12345' };
+    const mockWechatUser = {
+      openid: 'wechat-openid-12345',
+      nickname: '微信用户',
+      headimgurl: 'https://wx.qlogo.cn/xxx',
+      sex: 1,
+    };
+
+    beforeEach(() => {
+      global.fetch = jest.fn() as jest.Mock;
+    });
+
+    afterEach(() => {
+      delete (global as any).fetch;
+    });
+
+    it('WECHAT-01: should generate WeChat OAuth URL with state', () => {
+      const url = service.getWechatAuthUrl('test-state');
+      expect(url).toContain('open.weixin.qq.com/connect/qrconnect');
+      expect(url).toContain('appid=');
+      expect(url).toContain('redirect_uri=');
+      expect(url).toContain('response_type=code');
+      expect(url).toContain('scope=snsapi_login');
+      expect(url).toContain('state=test-state');
+    });
+
+    it('WECHAT-02: should create new user on first WeChat login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatUser) });
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(null);
+      const newOAuthAccount = {
+        provider: 'wechat',
+        providerUserId: 'wechat-openid-12345',
+        user: makeUser({ id: 'new-wechat-user-id' }),
+      };
+      mockPrisma.oAuthAccount.create.mockResolvedValue(newOAuthAccount);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleWechatCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(mockPrisma.oAuthAccount.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            provider: 'wechat',
+            providerUserId: 'wechat-openid-12345',
+          }),
+        }),
+      );
+    });
+
+    it('WECHAT-03: should return existing user on repeat WeChat login', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatUser) });
+      const existingOAuthAccount = {
+        provider: 'wechat',
+        providerUserId: 'wechat-openid-12345',
+        user: makeUser({ id: 'existing-wechat-user-id' }),
+      };
+      mockPrisma.oAuthAccount.findUnique.mockResolvedValue(existingOAuthAccount);
+      mockPrisma.user.update.mockResolvedValue(existingOAuthAccount.user);
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.handleWechatCallback('auth-code');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(mockPrisma.oAuthAccount.create).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).toHaveBeenCalled();
+    });
+
+    it('WECHAT-04: should throw BadRequestException on invalid WeChat token response', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ errcode: 40029, errmsg: 'invalid code' }) });
+
+      await expect(service.handleWechatCallback('invalid-code'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('WECHAT-05: should throw BadRequestException on failed WeChat userinfo', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ json: () => Promise.resolve(mockWechatTokenResponse) })
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ errcode: 41001, errmsg: 'access_token missing' }) });
+
+      await expect(service.handleWechatCallback('auth-code'))
+        .rejects.toThrow(BadRequestException);
+    });
+  });
 });
