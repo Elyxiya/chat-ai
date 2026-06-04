@@ -11,6 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { ChatGatewayService } from './chat-gateway.service';
+import { MetricsService } from '../modules/common/metrics.service';
 
 export enum WsMessageType {
   LOGIN = 0,
@@ -50,13 +51,17 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   private userSockets = new Map<string, Set<string>>();
 
-  constructor(private readonly chatGatewayService: ChatGatewayService) {}
+  constructor(
+    private readonly chatGatewayService: ChatGatewayService,
+    private readonly metrics: MetricsService,
+  ) {}
 
   afterInit() {
     this.logger.log('WebSocket Gateway initialized');
   }
 
   async handleConnection(client: Socket) {
+    const start = Date.now();
     try {
       const token = client.handshake.auth?.token || client.handshake.headers?.authorization?.replace('Bearer ', '');
       const user = await this.chatGatewayService.authenticate(token);
@@ -65,6 +70,7 @@ export class ChatGateway
         this.logger.warn(`Unauthorized connection attempt from ${client.id}`);
         client.emit('error', { message: 'Unauthorized' });
         client.disconnect();
+        this.metrics.incrementCounter('ws_connections_rejected');
         return;
       }
 
@@ -86,6 +92,9 @@ export class ChatGateway
       client.emit('initial_online_users', { userIds: onlineUserIds });
 
       client.emit('connected', { userId: user.id, sessionId: client.id });
+      this.metrics.setGauge('ws_connections_active', this.userSockets.size);
+      this.metrics.incrementCounter('ws_connections_total');
+      this.metrics.recordDuration('ws_connection_duration_ms', Date.now() - start);
       this.logger.log(`User ${user.username} connected (${client.id})`);
     } catch (error) {
       this.logger.error(`Connection error: ${error.message}`);
@@ -107,6 +116,7 @@ export class ChatGateway
       }
     }
 
+    this.metrics.setGauge('ws_connections_active', this.userSockets.size);
     this.logger.log(`User ${user.username} disconnected (${client.id})`);
   }
 
@@ -122,6 +132,9 @@ export class ChatGateway
   ) {
     const user = client.data.user as any;
     if (!user) return;
+
+    const start = Date.now();
+    const typeName = WsMessageType[payload.type] || 'UNKNOWN';
 
     switch (payload.type) {
       case WsMessageType.TEXT:
@@ -203,6 +216,9 @@ export class ChatGateway
         break;
       }
     }
+
+    this.metrics.incrementCounter('ws_messages_total', { type: typeName });
+    this.metrics.recordDuration('ws_message_duration_ms', Date.now() - start, { type: typeName });
   }
 
   @SubscribeMessage('edit_message')

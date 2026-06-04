@@ -64,7 +64,13 @@ describe('ChatGateway', () => {
       streamAIResponse: jest.fn(),
     };
 
-    gateway = new ChatGateway(mockGatewayService as any);
+    const mockMetricsService = {
+      incrementCounter: jest.fn(),
+      setGauge: jest.fn(),
+      recordDuration: jest.fn(),
+      export: jest.fn().mockReturnValue(''),
+    };
+    gateway = new ChatGateway(mockGatewayService as any, mockMetricsService as any);
     const { server } = createMockServer();
     gateway.server = server;
 

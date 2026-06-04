@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { MetricsService } from './modules/common/metrics.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -43,6 +44,12 @@ async function bootstrap() {
 
   app.getHttpAdapter().get('/health', (_, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.getHttpAdapter().get('/metrics', (_, res) => {
+    const metrics = app.get(MetricsService);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(metrics.export());
   });
 
   const port = process.env.PORT || 3000;
