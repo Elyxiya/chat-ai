@@ -39,7 +39,9 @@ export default function PrivateChatPage() {
   const [forwardMsgId, setForwardMsgId] = useState<string | null>(null);
   const [showGroupDetail, setShowGroupDetail] = useState(false);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
   const session = sessions.find((s) => s.id === sessionId);
   const sessionMessages = useMemo(() => messages[sessionId || ''] || [], [messages, sessionId]);
 
@@ -356,6 +358,14 @@ export default function PrivateChatPage() {
         batchMode={useChatStore.getState().batchMode}
         selectedIds={useChatStore.getState().selectedMessageIds}
         onToggleSelect={(id) => useChatStore.getState().toggleMessageSelection(id)}
+        onLoadMore={async (before: string) => {
+          if (!sessionId) return 0;
+          setIsLoadingMore(true);
+          const count = await loadMoreMessages(sessionId, before);
+          setIsLoadingMore(false);
+          return count;
+        }}
+        isLoadingMore={isLoadingMore}
         typingIndicator={
           typingUsersList.length > 0 ? (
             <div className="flex items-center gap-2 text-text-secondary text-sm">

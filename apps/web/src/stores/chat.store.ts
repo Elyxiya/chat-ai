@@ -8,6 +8,50 @@ import { useAuthStore } from './auth.store';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
 const MAX_VISIBLE_MESSAGES = 500;
+const ACK_TIMEOUT = 5000;
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 4000, 8000];
+
+interface PendingEntry {
+  clientMsgId: string;
+  wsType: number;
+  data: Record<string, any>;
+  retryCount: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** 等待 ACK 的消息队列（模块级别，供 connect/sendMessage 共享） */
+const _pendingAcks = new Map<string, PendingEntry>();
+
+function scheduleRetry(entry: PendingEntry) {
+  if (entry.retryCount >= MAX_RETRIES) {
+    _pendingAcks.delete(entry.clientMsgId);
+    useChatStore.setState((state) => {
+      const newMessages = { ...state.messages };
+      for (const sid of Object.keys(newMessages)) {
+        newMessages[sid] = newMessages[sid].map((m: any) =>
+          (m as any).clientMsgId === entry.clientMsgId
+            ? { ...m, status: 'failed' as const }
+            : m,
+        );
+      }
+      return { messages: newMessages };
+    });
+    return;
+  }
+  const socket = useChatStore.getState().socket;
+  if (!socket?.connected) return;
+  socket.emit('message', {
+    type: entry.wsType,
+    data: { ...entry.data, clientMsgId: entry.clientMsgId, isRetry: true },
+    timestamp: Date.now(),
+  });
+  entry.retryCount++;
+  entry.timer = setTimeout(
+    () => scheduleRetry(entry),
+    RETRY_DELAYS[Math.min(entry.retryCount, RETRY_DELAYS.length - 1)],
+  );
+}
 
 /** Binary search to find the index to insert a message by seq order. */
 function findInsertIndex(messages: ChatMessage[], seq: number): number {
@@ -37,6 +81,8 @@ interface ChatState {
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string | null) => void;
   loadMessages: (sessionId: string, params?: { limit?: number; before?: string }) => Promise<void>;
+  /** 追加加载更早的消息（prepend），返回新增条数用于滚动补偿 */
+  loadMoreMessages: (sessionId: string, before: string) => Promise<number>;
   sendMessage: (sessionId: string, content: string, contentType?: string) => void;
   sendFileMessage: (sessionId: string, url: string, fileType: string, fileName?: string, fileSize?: number) => void;
   sendTyping: (sessionId: string, isTyping: boolean) => void;
@@ -111,7 +157,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             timestamp: Date.now(),
           });
           entry.retryCount++;
-          entry.timer = setTimeout(() => scheduleRetry(entry), RETRY_DELAYS[entry.retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1]);
+          entry.timer = setTimeout(() => scheduleRetry(entry), RETRY_DELAYS[Math.min(entry.retryCount, RETRY_DELAYS.length - 1)]);
         }
       }
     });
@@ -119,51 +165,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     socket.on('initial_online_users', ({ userIds }: { userIds: string[] }) => {
       set({ onlineUsers: new Set(userIds) });
     });
-
-    // ── ACK + retry infrastructure ─────────────────────────────────
-    const ACK_TIMEOUT = 5000;
-    const MAX_RETRIES = 3;
-    const RETRY_DELAYS = [2000, 4000, 8000];
-
-    interface PendingEntry {
-      clientMsgId: string;
-      wsType: number;
-      data: Record<string, any>;
-      retryCount: number;
-      timer: ReturnType<typeof setTimeout> | null;
-    }
-
-    const _pendingAcks = new Map<string, PendingEntry>();
-
-    const scheduleRetry = (entry: PendingEntry) => {
-      if (entry.retryCount >= MAX_RETRIES) {
-        _pendingAcks.delete(entry.clientMsgId);
-        // Mark the message as failed in the store
-        set((state) => {
-          const newMessages = { ...state.messages };
-          for (const sid of Object.keys(newMessages)) {
-            newMessages[sid] = newMessages[sid].map((m) =>
-              (m as any).clientMsgId === entry.clientMsgId
-                ? { ...m, status: 'failed' as const }
-                : m,
-            );
-          }
-          return { messages: newMessages };
-        });
-        return;
-      }
-      if (!socket.connected) return; // will retry on reconnect
-      socket.emit('message', {
-        type: entry.wsType,
-        data: { ...entry.data, clientMsgId: entry.clientMsgId, isRetry: true },
-        timestamp: Date.now(),
-      });
-      entry.retryCount++;
-      entry.timer = setTimeout(
-        () => scheduleRetry(entry),
-        RETRY_DELAYS[Math.min(entry.retryCount, RETRY_DELAYS.length - 1)],
-      );
-    };
 
     socket.on('message_ack', ({ clientMsgId, serverMsgId, seq }: { clientMsgId: string; serverMsgId: string; seq?: number }) => {
       const entry = _pendingAcks.get(clientMsgId);
@@ -399,6 +400,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Failed to load messages';
       set({ messagesError: msg });
+    }
+  },
+
+  loadMoreMessages: async (sessionId, before) => {
+    try {
+      const res: any = await chatApi.getMessages(sessionId, { before, limit: 50 });
+      const older = (res.data || []).reverse();
+      if (older.length === 0) return 0;
+
+      let addedCount = 0;
+      set((state) => {
+        const existing = state.messages[sessionId] || [];
+        // 只追加比现有第一条更早的消息，避免重复
+        const firstExistingSeq = (existing[0] as any)?.metadata?.seq;
+        const deduped = firstExistingSeq
+          ? older.filter((m: any) => (m.metadata?.seq || 0) < firstExistingSeq)
+          : older;
+        addedCount = deduped.length;
+        if (addedCount === 0) return state;
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: [...deduped, ...existing],
+          },
+        };
+      });
+      return addedCount;
+    } catch {
+      return 0;
     }
   },
 

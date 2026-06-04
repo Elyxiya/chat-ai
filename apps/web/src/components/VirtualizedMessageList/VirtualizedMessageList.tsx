@@ -17,6 +17,10 @@ interface VirtualizedMessageListProps {
   batchMode?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (messageId: string) => void;
+  /** 上滑加载更早的消息，返回新增条数 */
+  onLoadMore?: (before: string) => Promise<number>;
+  /** 是否正在加载历史消息（显示加载提示） */
+  isLoadingMore?: boolean;
 }
 
 const ROW_ESTIMATED_SIZE = 120;
@@ -31,7 +35,11 @@ function getItemHeight(message: ChatMessage): number {
   return Math.max(110, lines * 24 + 80);
 }
 
-export default function VirtualizedMessageList({ messages, userId, typingIndicator, onReply, onForward, onBookmark, onReaction, onEdit, bookmarkedIds, sessionMembersCount, batchMode, selectedIds, onToggleSelect }: VirtualizedMessageListProps) {
+export default function VirtualizedMessageList({
+  messages, userId, typingIndicator, onReply, onForward, onBookmark,
+  onReaction, onEdit, bookmarkedIds, sessionMembersCount, batchMode,
+  selectedIds, onToggleSelect, onLoadMore, isLoadingMore,
+}: VirtualizedMessageListProps) {
   const listRef = useRef<List>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(0);
@@ -39,7 +47,11 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
   const [isAtBottom, setIsAtBottom] = useState(true);
   const sizeMap = useRef<Map<string, number>>(new Map());
   const prevLengthRef = useRef(messages.length);
+  const prevFirstIdRef = useRef<string | null>(messages[0]?.id || null);
   const rafRef = useRef<number | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const firstMsgIdRef = useRef<string | null>(null);
 
   // Observe container resize
   useEffect(() => {
@@ -61,8 +73,6 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
     prevLengthRef.current = messages.length;
 
     if (messages.length > prevLen && isAtBottom && listRef.current) {
-      // Reset size cache so react-window re-measures
-      // Then scroll in the next frame after rendering
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         listRef.current?.scrollToItem(messages.length - 1, 'end');
@@ -71,8 +81,7 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
     }
   }, [messages.length, isAtBottom]);
 
-  // Only add new messages to sizeMap, never clear — avoids cache invalidation
-  // when history messages are prepended (indices shift but ids stay stable)
+  // Only add new messages to sizeMap, never clear
   useEffect(() => {
     for (const msg of messages) {
       if (!sizeMap.current.has(msg.id)) {
@@ -94,10 +103,42 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
     return messages.reduce((sum, _, i) => sum + getSize(i), 0);
   }, [messages, getSize]);
 
+  // ── 当历史消息被 prepend 时补偿滚动偏移 ─────────────────────────
+  useEffect(() => {
+    const currentFirstId = messages[0]?.id || null;
+    if (currentFirstId && currentFirstId !== prevFirstIdRef.current) {
+      // 第一条消息变了，说明有历史消息被 prepend
+      const addedCount = messages.findIndex((m) => m.id === prevFirstIdRef.current);
+      if (addedCount > 0) {
+        let addedHeight = 0;
+        for (let i = 0; i < addedCount && i < messages.length; i++) {
+          addedHeight += sizeMap.current.get(messages[i].id) ?? ROW_ESTIMATED_SIZE;
+        }
+        requestAnimationFrame(() => {
+          listRef.current?.scrollTo(scrollOffsetRef.current + addedHeight);
+        });
+      }
+      prevFirstIdRef.current = currentFirstId;
+    }
+  }, [messages]);
+
   const handleScroll = useCallback(({ scrollOffset }: { scrollOffset: number }) => {
+    scrollOffsetRef.current = scrollOffset;
     const bottom = totalContentHeight - scrollOffset - containerHeight;
     setIsAtBottom(bottom < SCROLL_BOTTOM_THRESHOLD);
-  }, [containerHeight, totalContentHeight]);
+
+    // 滚到顶部附近时触发历史加载
+    if (scrollOffset < 50 && onLoadMore && !loadingMoreRef.current && messages.length > 0) {
+      const firstReal = messages.find((m) => !m.id.startsWith('temp-'));
+      if (firstReal && firstReal.id !== firstMsgIdRef.current) {
+        firstMsgIdRef.current = firstReal.id;
+        loadingMoreRef.current = true;
+        onLoadMore(firstReal.createdAt).then(() => {
+          loadingMoreRef.current = false;
+        });
+      }
+    }
+  }, [containerHeight, totalContentHeight, onLoadMore, messages]);
 
   const scrollToBottom = useCallback(() => {
     if (listRef.current) {
