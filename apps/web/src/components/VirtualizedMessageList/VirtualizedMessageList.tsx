@@ -37,7 +37,7 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
   const [containerHeight, setContainerHeight] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const sizeMap = useRef<{ [key: number]: number }>({});
+  const sizeMap = useRef<Map<string, number>>(new Map());
   const prevLengthRef = useRef(messages.length);
   const rafRef = useRef<number | null>(null);
 
@@ -71,16 +71,23 @@ export default function VirtualizedMessageList({ messages, userId, typingIndicat
     }
   }, [messages.length, isAtBottom]);
 
-  // Reset size cache when messages change
+  // Only add new messages to sizeMap, never clear — avoids cache invalidation
+  // when history messages are prepended (indices shift but ids stay stable)
   useEffect(() => {
-    sizeMap.current = {};
+    for (const msg of messages) {
+      if (!sizeMap.current.has(msg.id)) {
+        sizeMap.current.set(msg.id, getItemHeight(msg));
+      }
+    }
   }, [messages]);
 
   const getSize = useCallback((index: number) => {
-    if (!sizeMap.current[index]) {
-      sizeMap.current[index] = getItemHeight(messages[index]);
+    const msg = messages[index];
+    if (!msg) return ROW_ESTIMATED_SIZE;
+    if (!sizeMap.current.has(msg.id)) {
+      sizeMap.current.set(msg.id, getItemHeight(msg));
     }
-    return sizeMap.current[index];
+    return sizeMap.current.get(msg.id)!;
   }, [messages]);
 
   const totalContentHeight = useMemo(() => {
