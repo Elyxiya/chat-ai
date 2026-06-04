@@ -95,34 +95,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ onlineUsers: new Set(userIds) });
     });
 
-    socket.on('message', (msg: ChatMessage) => {
-      const state = get();
-      const { messages, activeSessionId } = state;
-      const sessionMsgs = messages[msg.sessionId] || [];
+    // Batched message processing — group rapid messages into single set() call
+    const _msgBuffer: ChatMessage[] = [];
+    let _flushHandle: number | null = null;
 
-      // Remove optimistic temp messages from the same sender in this session
-      const filtered = sessionMsgs.filter(
-        (m) => !(m.id.startsWith('temp-') && m.senderId === msg.senderId),
+    const flushMessages = () => {
+      _flushHandle = null;
+      if (_msgBuffer.length === 0) return;
+
+      const batch = _msgBuffer.splice(0);
+      // Sort by createdAt so in-flight reordering doesn't scramble display order
+      batch.sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       );
 
-      // Cap at MAX_VISIBLE_MESSAGES to prevent unbounded memory growth
-      const capped = filtered.length >= MAX_VISIBLE_MESSAGES
-        ? [...filtered.slice(filtered.length - MAX_VISIBLE_MESSAGES + 1), msg]
-        : [...filtered, msg];
+      const state = get();
+      const newMessages = { ...state.messages };
+      const msgCountPerSession = new Map<string, number>();
+
+      for (const msg of batch) {
+        const sessionMsgs = newMessages[msg.sessionId] || [];
+        const filtered = sessionMsgs.filter(
+          (m) => !(m.id.startsWith('temp-') && m.senderId === msg.senderId),
+        );
+        newMessages[msg.sessionId] = filtered.length >= MAX_VISIBLE_MESSAGES
+          ? [...filtered.slice(filtered.length - MAX_VISIBLE_MESSAGES + 1), msg]
+          : [...filtered, msg];
+        msgCountPerSession.set(
+          msg.sessionId,
+          (msgCountPerSession.get(msg.sessionId) || 0) + 1,
+        );
+      }
 
       set({
-        messages: {
-          ...messages,
-          [msg.sessionId]: capped,
-        },
+        messages: newMessages,
+        sessions: state.sessions.map((s) => {
+          const count = msgCountPerSession.get(s.id);
+          return count && s.id !== state.activeSessionId
+            ? { ...s, unreadCount: s.unreadCount + count }
+            : s;
+        }),
       });
-      if (msg.sessionId !== activeSessionId) {
-        set((state) => ({
-          sessions: state.sessions.map((s) =>
-            s.id === msg.sessionId ? { ...s, unreadCount: s.unreadCount + 1 } : s,
-          ),
-        }));
+    };
+
+    const scheduleFlush = () => {
+      if (_flushHandle === null) {
+        _flushHandle = requestAnimationFrame(flushMessages);
       }
+    };
+
+    socket.on('message', (msg: ChatMessage) => {
+      _msgBuffer.push(msg);
+      scheduleFlush();
     });
 
     socket.on('presence', ({ userId, status }: { userId: string; status: string }) => {
