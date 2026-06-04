@@ -106,7 +106,7 @@ export default function ChannelSettingsPage() {
 
   const handleDeleteChannel = async () => {
     if (!sessionId) return;
-    if (!window.confirm('确定要删除这个频道吗？此操作不可撤销。')) return;
+    if (!window.confirm(t('chat.deleteChannelConfirm'))) return;
     try {
       await chatApi.deleteChannel(sessionId);
       navigate('/chat');
@@ -209,15 +209,14 @@ export default function ChannelSettingsPage() {
               ))}
             </div>
 
-            {/* 删除频道 */}
             <div className="mt-8 pt-6 border-t border-border">
-              <h3 className="text-sm font-semibold mb-2 text-red-600">危险操作</h3>
-              <p className="text-xs text-text-secondary mb-3">删除频道后所有消息将被清除，此操作不可撤销。</p>
+              <h3 className="text-sm font-semibold mb-2 text-red-600">{t('chat.dangerZone')}</h3>
+              <p className="text-xs text-text-secondary mb-3">{t('chat.deleteChannelWarning')}</p>
               <button
                 onClick={handleDeleteChannel}
                 className="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
               >
-                删除频道
+                {t('chat.deleteChannel')}
               </button>
             </div>
           </div>
