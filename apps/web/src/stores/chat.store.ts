@@ -7,6 +7,7 @@ import { useFriendStore } from './friend.store';
 import { useAuthStore } from './auth.store';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
+const MAX_VISIBLE_MESSAGES = 500;
 
 interface ChatState {
   sessions: ChatSession[];
@@ -104,10 +105,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         (m) => !(m.id.startsWith('temp-') && m.senderId === msg.senderId),
       );
 
+      // Cap at MAX_VISIBLE_MESSAGES to prevent unbounded memory growth
+      const capped = filtered.length >= MAX_VISIBLE_MESSAGES
+        ? [...filtered.slice(filtered.length - MAX_VISIBLE_MESSAGES + 1), msg]
+        : [...filtered, msg];
+
       set({
         messages: {
           ...messages,
-          [msg.sessionId]: [...filtered, msg],
+          [msg.sessionId]: capped,
         },
       });
       if (msg.sessionId !== activeSessionId) {
