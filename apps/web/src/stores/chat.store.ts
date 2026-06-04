@@ -89,13 +89,90 @@ export const useChatStore = create<ChatState>((set, get) => ({
       for (const s of currentSessions) {
         socket.emit('join_session', { sessionId: s.id });
       }
+      // Retry any messages that were in-flight when we disconnected
+      for (const [, entry] of _pendingAcks) {
+        if (entry.retryCount < MAX_RETRIES) {
+          socket.emit('message', {
+            type: entry.wsType,
+            data: { ...entry.data, clientMsgId: entry.clientMsgId, isRetry: true },
+            timestamp: Date.now(),
+          });
+          entry.retryCount++;
+          entry.timer = setTimeout(() => scheduleRetry(entry), RETRY_DELAYS[entry.retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1]);
+        }
+      }
     });
 
     socket.on('initial_online_users', ({ userIds }: { userIds: string[] }) => {
       set({ onlineUsers: new Set(userIds) });
     });
 
-    // Batched message processing — group rapid messages into single set() call
+    // ── ACK + retry infrastructure ─────────────────────────────────
+    const ACK_TIMEOUT = 5000;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [2000, 4000, 8000];
+
+    interface PendingEntry {
+      clientMsgId: string;
+      wsType: number;
+      data: Record<string, any>;
+      retryCount: number;
+      timer: ReturnType<typeof setTimeout> | null;
+    }
+
+    const _pendingAcks = new Map<string, PendingEntry>();
+
+    const scheduleRetry = (entry: PendingEntry) => {
+      if (entry.retryCount >= MAX_RETRIES) {
+        _pendingAcks.delete(entry.clientMsgId);
+        // Mark the message as failed in the store
+        set((state) => {
+          const newMessages = { ...state.messages };
+          for (const sid of Object.keys(newMessages)) {
+            newMessages[sid] = newMessages[sid].map((m) =>
+              (m as any).clientMsgId === entry.clientMsgId
+                ? { ...m, status: 'failed' as const }
+                : m,
+            );
+          }
+          return { messages: newMessages };
+        });
+        return;
+      }
+      if (!socket.connected) return; // will retry on reconnect
+      socket.emit('message', {
+        type: entry.wsType,
+        data: { ...entry.data, clientMsgId: entry.clientMsgId, isRetry: true },
+        timestamp: Date.now(),
+      });
+      entry.retryCount++;
+      entry.timer = setTimeout(
+        () => scheduleRetry(entry),
+        RETRY_DELAYS[Math.min(entry.retryCount, RETRY_DELAYS.length - 1)],
+      );
+    };
+
+    socket.on('message_ack', ({ clientMsgId, serverMsgId }: { clientMsgId: string; serverMsgId: string }) => {
+      const entry = _pendingAcks.get(clientMsgId);
+      if (!entry) return;
+      if (entry.timer) clearTimeout(entry.timer);
+      _pendingAcks.delete(clientMsgId);
+
+      // Replace temp ID with server ID and mark as sent
+      set((state) => {
+        const newMessages = { ...state.messages };
+        for (const sid of Object.keys(newMessages)) {
+          newMessages[sid] = newMessages[sid].map((m) =>
+            (m as any).clientMsgId === clientMsgId
+              ? { ...m, id: serverMsgId, status: 'sent' as const }
+              : m,
+          );
+        }
+        return { messages: newMessages };
+      });
+    });
+
+    // ── Batched message processing ─────────────────────────────────
     const _msgBuffer: ChatMessage[] = [];
     let _flushHandle: number | null = null;
 
@@ -115,8 +192,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       for (const msg of batch) {
         const sessionMsgs = newMessages[msg.sessionId] || [];
+        const msgClientId = (msg as any).metadata?.clientMsgId as string | undefined;
         const filtered = sessionMsgs.filter(
-          (m) => !(m.id.startsWith('temp-') && m.senderId === msg.senderId),
+          (m) =>
+            // Remove optimistic temp messages from the same sender
+            !(m.id.startsWith('temp-') && m.senderId === msg.senderId) &&
+            // Dedup by clientMsgId (ACK may have already updated the message)
+            !(msgClientId && (m as any).clientMsgId === msgClientId),
         );
         newMessages[msg.sessionId] = filtered.length >= MAX_VISIBLE_MESSAGES
           ? [...filtered.slice(filtered.length - MAX_VISIBLE_MESSAGES + 1), msg]
@@ -302,10 +384,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!socket) return;
 
     // Optimistic update — show message immediately in the UI
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const clientMsgId = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
     const user = useAuthStore.getState().user;
     const optimisticMsg = {
-      id: tempId,
+      id: `temp-${clientMsgId}`,
       sessionId,
       senderId: user?.id || null,
       content,
@@ -322,6 +404,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
       } : null,
+      status: 'sending' as const,
+      clientMsgId,
     } as unknown as ChatMessage;
 
     set({
@@ -331,10 +415,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
     });
 
-    // Emit to server
+    // Track for ACK + retry
+    const entry: PendingEntry = {
+      clientMsgId,
+      wsType: WsMessageType.TEXT,
+      data: { sessionId, content, contentType },
+      retryCount: 0,
+      timer: setTimeout(() => scheduleRetry(entry), ACK_TIMEOUT),
+    };
+    _pendingAcks.set(clientMsgId, entry);
+
+    // Emit to server with clientMsgId for idempotent dedup
     socket.emit('message', {
       type: WsMessageType.TEXT,
-      data: { sessionId, content, contentType, _tempId: tempId },
+      data: { sessionId, content, contentType, clientMsgId },
       timestamp: Date.now(),
     });
   },

@@ -142,12 +142,21 @@ export class ChatGateway
       case WsMessageType.FILE:
       case WsMessageType.AUDIO:
       case WsMessageType.VIDEO: {
-        const { sessionId, content, metadata, mentions, replyToId } = payload.data;
+        const { sessionId, content, metadata, mentions, replyToId, clientMsgId } = payload.data;
+        const enrichedMetadata = clientMsgId
+          ? { ...(metadata || {}), clientMsgId }
+          : metadata;
+
         const message = await this.chatGatewayService.sendMessage(
           user.id,
           sessionId,
-          { content, contentType: WsMessageType[payload.type].toLowerCase(), metadata, mentions, replyToId },
+          { content, contentType: WsMessageType[payload.type].toLowerCase(), metadata: enrichedMetadata, mentions, replyToId },
         );
+
+        // ACK to sender only — confirms the message was persisted
+        if (clientMsgId) {
+          client.emit('message_ack', { clientMsgId, serverMsgId: message.id });
+        }
 
         this.server.to(`session:${sessionId}`).emit('message', message);
 

@@ -81,6 +81,31 @@ export class ChatGatewayService {
   }
 
   async sendMessage(userId: string, sessionId: string, dto: Partial<SendMessageDto>) {
+    const clientMsgId = dto.metadata?.clientMsgId as string | undefined;
+
+    // Idempotency: if clientMsgId is provided and already exists, return existing message
+    if (clientMsgId) {
+      try {
+        const existing = await this.prisma.message.findFirst({
+          where: {
+            senderId: userId,
+            sessionId,
+            metadata: { path: ['clientMsgId'], equals: clientMsgId },
+          },
+          include: {
+            sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
+            reactions: true,
+          },
+        });
+        if (existing) {
+          this.logger.debug(`[ACK] Duplicate clientMsgId=${clientMsgId}, returning existing message ${existing.id}`);
+          return existing;
+        }
+      } catch (err: any) {
+        this.logger.warn(`[ACK] Idempotency check failed for clientMsgId=${clientMsgId}: ${err.message}`);
+      }
+    }
+
     return this.prisma.message.create({
       data: {
         sessionId,
