@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useCallStore } from '@/stores/call.store';
@@ -15,6 +16,7 @@ import RichTextEditor from '@/components/RichTextEditor/RichTextEditor';
 import { chatApi, uploadApi } from '@/api/client';
 
 export default function PrivateChatPage() {
+  const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -22,6 +24,7 @@ export default function PrivateChatPage() {
     sessions,
     activeSessionId,
     messages,
+    messagesError,
     typingUsers,
     setActiveSession,
     loadMessages,
@@ -40,10 +43,15 @@ export default function PrivateChatPage() {
   const session = sessions.find((s) => s.id === sessionId);
   const sessionMessages = useMemo(() => messages[sessionId || ''] || [], [messages, sessionId]);
 
+  // Load messages: on session change (switch) AND on re-entry (return from another page)
+  const loadedSessionRef = useRef<string | null>(null);
   useEffect(() => {
     if (sessionId && sessionId !== activeSessionId) {
       setActiveSession(sessionId);
+    }
+    if (sessionId && loadedSessionRef.current !== sessionId) {
       loadMessages(sessionId);
+      loadedSessionRef.current = sessionId;
     }
   }, [sessionId, activeSessionId, setActiveSession, loadMessages]);
 
@@ -152,7 +160,7 @@ export default function PrivateChatPage() {
   const otherMembers = session?.members.filter((m) => m.user.id !== user?.id) || [];
   const chatName = otherMembers.length === 1
     ? otherMembers[0].user.nickname || otherMembers[0].user.username
-    : session?.name || 'Chat';
+    : session?.name || t('nav.chats');
 
   return (
     <>
@@ -185,12 +193,12 @@ export default function PrivateChatPage() {
           <h2 className="font-semibold text-sm truncate flex items-center gap-2">
             {chatName}
             {session?.sessionType === 'channel' && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded font-normal">Channel</span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded font-normal">{t('chat.channel')}</span>
             )}
           </h2>
           {session?.sessionType === 'channel' ? (
             <p className="text-xs text-text-secondary truncate">
-              {session._count?.members || session.members?.length || 0} subscribers
+              {session._count?.members || session.members?.length || 0} {t('chat.subscribers')}
             </p>
           ) : otherMembers.length > 0 ? (
             <p className="text-xs text-text-secondary truncate">
@@ -202,7 +210,7 @@ export default function PrivateChatPage() {
           <button
             onClick={() => setShowGroupDetail(true)}
             className="p-2 hover:bg-border rounded-lg transition-colors"
-            title="Group info"
+            title={t('chat.groupInfo')}
           >
             <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -218,7 +226,7 @@ export default function PrivateChatPage() {
                 useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'audio');
               }}
               className="p-2 hover:bg-border rounded-lg transition-colors"
-              title="Voice call"
+              title={t('chat.voiceCall')}
             >
               <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -230,7 +238,7 @@ export default function PrivateChatPage() {
                 useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'video');
               }}
               className="p-2 hover:bg-border rounded-lg transition-colors"
-              title="Video call"
+              title={t('chat.videoCall')}
             >
               <svg className="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -247,10 +255,23 @@ export default function PrivateChatPage() {
               }
             }}
             className="p-2 hover:bg-border rounded-lg transition-colors"
-            title="Unsubscribe"
+            title={t('chat.unsubscribe')}
           >
             <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        {/* Channel settings gear — visible to owner/admin */}
+        {session?.sessionType === 'channel' && (session.myRole === 'owner' || session.myRole === 'admin') && (
+          <button
+            onClick={() => navigate(`/channels/${session.id}/settings`)}
+            className="p-2 hover:bg-border rounded-lg transition-colors"
+            title={t('chat.channelSettings')}
+          >
+            <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
         )}
@@ -259,7 +280,7 @@ export default function PrivateChatPage() {
           <button
             onClick={() => useChatStore.getState().toggleBatchMode()}
             className={`p-2 hover:bg-border rounded-lg transition-colors ${useChatStore.getState().batchMode ? 'text-primary-600 bg-primary-50' : ''}`}
-            title="Select messages"
+            title={t('chat.selectMessages')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -272,7 +293,7 @@ export default function PrivateChatPage() {
       {useChatStore.getState().batchMode && (
         <div className="px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border-b border-border flex items-center gap-3">
           <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
-            {useChatStore.getState().selectedMessageIds.size} selected
+            {t('chat.selected')} {useChatStore.getState().selectedMessageIds.size}
           </span>
           <button
             onClick={() => {
@@ -284,7 +305,7 @@ export default function PrivateChatPage() {
             disabled={useChatStore.getState().selectedMessageIds.size === 0}
             className="px-3 py-1 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
           >
-            Forward
+            {t('chat.batchForward')}
           </button>
           <button
             onClick={async () => {
@@ -296,13 +317,29 @@ export default function PrivateChatPage() {
             disabled={useChatStore.getState().selectedMessageIds.size === 0}
             className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
           >
-            Delete
+            {t('chat.batchDelete')}
           </button>
           <button
             onClick={() => useChatStore.getState().clearSelection()}
             className="px-3 py-1 text-sm border border-border rounded-lg hover:bg-border transition-colors ml-auto"
           >
-            Cancel
+            {t('common.cancel')}
+          </button>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {messagesError && (
+        <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 flex items-center gap-2">
+          <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm text-red-600 dark:text-red-400 flex-1">{messagesError}</span>
+          <button
+            onClick={() => sessionId && loadMessages(sessionId)}
+            className="text-sm text-red-600 dark:text-red-400 underline hover:no-underline flex-shrink-0"
+          >
+            {t('chat.retry')}
           </button>
         </div>
       )}
@@ -327,7 +364,7 @@ export default function PrivateChatPage() {
                   <span key={i} className="w-2 h-2 bg-text-secondary rounded-full animate-typing-dot" style={{ animationDelay: `${i * 0.2}s` }} />
                 ))}
               </div>
-              <span>{typingUsersList.map((u) => u.username).join(', ')} typing...</span>
+              <span>{typingUsersList.map((u) => u.username).join(', ')} {t('chat.typing')}</span>
             </div>
           ) : undefined
         }
@@ -343,7 +380,7 @@ export default function PrivateChatPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
               </svg>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-primary-600">{replyTo.sender?.nickname || replyTo.sender?.username || 'Message'}</p>
+                <p className="text-xs font-medium text-primary-600">{replyTo.sender?.nickname || replyTo.sender?.username || t('common.send')}</p>
                 <p className="text-xs text-text-secondary truncate">{replyTo.content.slice(0, 100)}</p>
               </div>
             </div>
@@ -361,7 +398,7 @@ export default function PrivateChatPage() {
               <textarea
                 className="input-field resize-none max-h-32"
                 rows={1}
-                placeholder="Edit message..."
+                placeholder={t('chat.editMessagePlaceholder')}
                 value={editInput}
                 onChange={(e) => setEditInput(e.target.value)}
                 onKeyDown={handleEditKeyDown}
@@ -372,13 +409,13 @@ export default function PrivateChatPage() {
                 disabled={!editInput.trim()}
                 className="btn-primary px-4 py-2 flex-shrink-0 text-sm"
               >
-                Save
+                {t('common.save')}
               </button>
               <button
                 onClick={handleEditCancel}
                 className="px-4 py-2 flex-shrink-0 text-sm border border-border rounded-lg hover:bg-border transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </>
           ) : (
@@ -397,7 +434,7 @@ export default function PrivateChatPage() {
                     }, 2000);
                   }}
                   onSend={handleSend}
-                  placeholder={replyTo ? 'Reply to message...' : 'Type a message...'}
+                  placeholder={replyTo ? t('chat.replyTo') : t('chat.typeMessage')}
                   autoFocus
                 />
               </div>

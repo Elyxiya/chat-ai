@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface FilePreviewModalProps {
   src: string;
@@ -30,7 +31,7 @@ export default function FilePreviewModal({ src, fileName, mimeType, fileSize, on
 
   const isImage = mimeType?.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(src);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
@@ -80,6 +81,7 @@ export default function FilePreviewModal({ src, fileName, mimeType, fileSize, on
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

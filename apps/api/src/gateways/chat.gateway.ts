@@ -80,6 +80,11 @@ export class ChatGateway
       await this.chatGatewayService.setUserOnline(user.id);
       this.server.emit('presence', { userId: user.id, status: 'online' });
 
+      // Send the currently online user IDs to the newly connected client
+      // so they don't start with an empty online list after a refresh
+      const onlineUserIds = Array.from(this.userSockets.keys());
+      client.emit('initial_online_users', { userIds: onlineUserIds });
+
       client.emit('connected', { userId: user.id, sessionId: client.id });
       this.logger.log(`User ${user.username} connected (${client.id})`);
     } catch (error) {
@@ -245,7 +250,11 @@ export class ChatGateway
     @MessageBody() data: { sessionId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const user = client.data.user as any;
+    const user = client.data?.user as any;
+    if (!user?.id) {
+      client.emit('error', { message: 'Not authenticated' });
+      return;
+    }
     const canJoin = await this.chatGatewayService.canJoinSession(user.id, data.sessionId);
 
     if (canJoin) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { chatApi } from '@/api/client';
 import { useNotificationStore, Notification as AppNotification } from '@/stores/notification.store';
 import { formatDistanceToNow } from 'date-fns';
@@ -10,6 +11,9 @@ const NOTIFICATION_ICONS: Record<string, string> = {
   message: '💬',
   mention: '@',
   system: '⚙️',
+  channel_invitation: '📢',
+  join_approved: '✅',
+  join_request: '📋',
 };
 
 const NOTIFICATION_COLORS: Record<string, string> = {
@@ -18,6 +22,9 @@ const NOTIFICATION_COLORS: Record<string, string> = {
   message: 'bg-surface dark:bg-slate-800 border-border',
   mention: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',
   system: 'bg-gray-50 dark:bg-gray-800 border-border',
+  channel_invitation: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
+  join_approved: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+  join_request: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
 };
 
 function formatTime(iso: string): string {
@@ -31,8 +38,10 @@ function formatTime(iso: string): string {
 }
 
 export default function NotificationPanel() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [friendActionLoading, setFriendActionLoading] = useState<string | null>(null);
+  const [inviteActionLoading, setInviteActionLoading] = useState<string | null>(null);
   const {
     notifications,
     unreadCount,
@@ -49,7 +58,19 @@ export default function NotificationPanel() {
     setOpen(false);
 
     const data = notification.data || {};
-    if (data.sessionId) {
+
+    // join_request → navigate to channel settings (for admins)
+    if (notification.type === 'join_request' && data.channelId) {
+      navigate(`/channels/${data.channelId}/settings`);
+      return;
+    }
+    if (notification.type === 'join_approved' && data.channelId) {
+      navigate(`/channel/${data.channelId}`);
+      return;
+    }
+    if (data.channelId) {
+      navigate(`/channel/${data.channelId}`);
+    } else if (data.sessionId) {
       navigate(`/chat/${data.sessionId}`);
     } else if (notification.type === 'friend_request' && data.requesterId) {
       navigate(`/chat`);
@@ -64,6 +85,20 @@ export default function NotificationPanel() {
       await deleteNotification(notificationId);
     } catch { /* ignore */ }
     finally { setFriendActionLoading(null); }
+  };
+
+  const handleChannelInvitationAction = async (invitationId: string, action: 'accept' | 'reject', notificationId: string) => {
+    if (inviteActionLoading === notificationId) return;
+    setInviteActionLoading(notificationId);
+    try {
+      if (action === 'accept') {
+        await chatApi.acceptChannelInvitation(invitationId);
+      } else {
+        await chatApi.rejectChannelInvitation(invitationId);
+      }
+      await deleteNotification(notificationId);
+    } catch { /* ignore */ }
+    finally { setInviteActionLoading(null); }
   };
 
   useEffect(() => {
@@ -170,6 +205,30 @@ export default function NotificationPanel() {
                             className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
                           >
                             {friendActionLoading === notification.id ? '...' : 'Reject'}
+                          </button>
+                        </div>
+                      )}
+                      {notification.type === 'channel_invitation' && notification.data?.invitationId && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleChannelInvitationAction(notification.data!.invitationId, 'accept', notification.id);
+                            }}
+                            disabled={inviteActionLoading === notification.id}
+                            className="px-2.5 py-1 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                          >
+                            {inviteActionLoading === notification.id ? '...' : t('chat.acceptInvite')}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleChannelInvitationAction(notification.data!.invitationId, 'reject', notification.id);
+                            }}
+                            disabled={inviteActionLoading === notification.id}
+                            className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            {inviteActionLoading === notification.id ? '...' : t('chat.declineInvite')}
                           </button>
                         </div>
                       )}

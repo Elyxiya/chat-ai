@@ -14,7 +14,13 @@
       "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMjg5NjViMy1jODM5LTQyOGItOGY3Yi1mNjNhNzJjYmZmZjkiLCJ1c2VybmFtZSI6InRlc3Rub3RpZiIsImlhdCI6MTc3OTg5NzY4MSwiZXhwIjoxNzc5ODk4NTgxfQ.U0XJ_J1CMU4mLA6Mn5mYMF27D0UPtl9MPLrF6ItCsY8\"; try { $response = Invoke-WebRequest -Uri \"http://localhost:3000/api/v1/notifications/unread-count\" -Headers @{Authorization = \"Bearer $token\"} -TimeoutSec 5 -UseBasicParsing; Write-Host \"Status: $\\($response.StatusCode\\)`nBody: $\\($response.Content\\)\" } catch { Write-Host \"Error: $_\" })",
       "PowerShell(git add apps/api/src/modules/notification/notification.service.ts apps/web/src/components/NotificationPanel/NotificationPanel.tsx apps/web/src/stores/notification.store.ts \"docs/������־.md\" \"docs/��Ŀ����.md\" pnpm-lock.yaml)",
       "PowerShell(New-Item -ItemType Directory -Force -Path \"docs\\\\��Ŀ���Ĺ��ܽ���\\\\���\")",
-      "PowerShell(New-Item -ItemType Directory -Force -Path \"docs\\\\��Ŀ���Ĺ��ܽ���\\\\ǰ��\")"
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"docs\\\\��Ŀ���Ĺ��ܽ���\\\\ǰ��\")",
+      "Read(//e/����/web-txt/xm/chat/new/**)",
+      "PowerShell(Get-ChildItem -Path \"e:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\apps\\\\api\\\\src\\\\modules\" -Recurse -Depth 2 | Where-Object { $_.Mode -match \"d\" } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"e:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\apps\\\\api\\\\src\\\\modules\" -Recurse -Depth 5 -File | ForEach-Object { $_.FullName.Replace\\(\"E:\\\\桌面\\\\web-txt\\\\xm\\\\chat\\\\new\\\\new-chat-system\\\\apps\\\\api\\\\src\\\\modules\\\\\", \"\"\\) })"
+    ],
+    "additionalDirectories": [
+      "E:\\����\\web-txt\\xm\\chat\\new\\new-chat-system\\apps\\api\\node_modules\\.prisma\\client"
     ]
   }
 }

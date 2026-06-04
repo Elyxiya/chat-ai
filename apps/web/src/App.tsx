@@ -11,6 +11,8 @@ import KnowledgePage from './pages/KnowledgePage';
 import GroupManagementPage from './pages/GroupManagementPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
+import ChannelDiscoveryPage from './pages/ChannelDiscoveryPage';
+import ChannelSettingsPage from './pages/ChannelSettingsPage';
 import { ToastProvider } from './components/Toast/ToastContainer';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +54,8 @@ export default function App() {
         <Route path="chat" element={<PrivateChatPage />} />
         <Route path="chat/:sessionId" element={<PrivateChatPage />} />
         <Route path="channel/:sessionId" element={<PrivateChatPage />} />
+        <Route path="channels/:sessionId/settings" element={<ChannelSettingsPage />} />
+        <Route path="channels/discover" element={<ChannelDiscoveryPage />} />
         <Route path="agent" element={<EnhancedAgentPage />} />
         <Route path="agent/:sessionId" element={<EnhancedAgentPage />} />
         <Route path="settings" element={<SettingsPage />} />

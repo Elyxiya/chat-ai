@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 
 export default function GroupManagementPage() {
+  const { t } = useTranslation();
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { sessions } = useChatStore();
@@ -86,8 +88,8 @@ export default function GroupManagementPage() {
   if (!isGroup) {
     return (
       <div className="p-8 text-center text-text-secondary">
-        <p>This page is only for group chats.</p>
-        <button onClick={() => navigate(-1)} className="btn-primary mt-4">Go Back</button>
+        <p>{t('chat.groupOnly') || 'This page is only for group chats.'}</p>
+        <button onClick={() => navigate(-1)} className="btn-primary mt-4">{t('common.back')}</button>
       </div>
     );
   }
@@ -101,15 +103,15 @@ export default function GroupManagementPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span className="text-sm">Back to chat</span>
+            <span className="text-sm">{t('common.back')}</span>
           </button>
-          <h2 className="font-semibold text-lg">{session?.name || 'Group Settings'}</h2>
-          <p className="text-xs text-text-secondary mt-1">{session?.sessionType} · {members.length} members</p>
+          <h2 className="font-semibold text-lg">{session?.name || t('chat.groupInfo')}</h2>
+          <p className="text-xs text-text-secondary mt-1">{session?.sessionType} · {members.length} {t('chat.members')}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
-            <h3 className="text-sm font-medium mb-2">Members ({members.length})</h3>
+            <h3 className="text-sm font-medium mb-2">{t('chat.members')} ({members.length})</h3>
             <div className="space-y-1">
               {members.map((m) => (
                 <div key={m.user?.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-bg">
@@ -147,18 +149,18 @@ export default function GroupManagementPage() {
       {/* Main */}
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         <div className="mb-4">
-          <h3 className="text-sm font-medium mb-2">Search to Invite</h3>
+          <h3 className="text-sm font-medium mb-2">{t('chat.searchUsers')}</h3>
           <div className="flex gap-2 mb-3">
             <input
               type="text"
               value={inviteQuery}
               onChange={(e) => setInviteQuery(e.target.value)}
-              placeholder="Search by username or email..."
+              placeholder={t('chat.searchUsers')}
               className="input-field flex-1"
               onKeyDown={(e) => e.key === 'Enter' && handleSearchInvite()}
             />
             <button onClick={handleSearchInvite} disabled={inviteLoading || !inviteQuery.trim()} className="btn-primary px-4">
-              {inviteLoading ? '...' : 'Search'}
+              {inviteLoading ? t('common.loading') : t('common.search')}
             </button>
           </div>
           {inviteResults.length > 0 && (
@@ -181,34 +183,34 @@ export default function GroupManagementPage() {
                     disabled={inviteSending.has(u.id)}
                     className="btn-primary px-3 py-1 text-xs flex-shrink-0"
                   >
-                    {inviteSending.has(u.id) ? '...' : 'Invite'}
+                    {inviteSending.has(u.id) ? t('common.loading') : t('chat.invite') || 'Invite'}
                   </button>
                 </div>
               ))}
             </div>
           )}
           {inviteResults.length === 0 && inviteQuery.trim() && !inviteLoading && (
-            <p className="text-xs text-text-secondary">No users found</p>
+            <p className="text-xs text-text-secondary">{t('admin.noUsers')}</p>
           )}
         </div>
 
         <div>
-          <h3 className="text-sm font-medium mb-2">Group Info</h3>
+          <h3 className="text-sm font-medium mb-2">{t('chat.groupInfo')}</h3>
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Name</span>
+              <span className="text-sm text-text-secondary">{t('knowledge.baseName')}</span>
               <span className="text-sm font-medium">{session?.name}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Type</span>
+              <span className="text-sm text-text-secondary">{t('admin.type') || 'Type'}</span>
               <span className="text-sm capitalize">{session?.sessionType}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Members</span>
+              <span className="text-sm text-text-secondary">{t('chat.members')}</span>
               <span className="text-sm">{members.length}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Created</span>
+              <span className="text-sm text-text-secondary">{t('admin.joined')}</span>
               <span className="text-sm">{session?.createdAt ? new Date(session.createdAt).toLocaleDateString() : 'N/A'}</span>
             </div>
           </div>

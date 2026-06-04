@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useKnowledgeStore } from '@/stores/knowledge.store';
 import { knowledgeApi } from '@/api/client';
 import { KnowledgeDocument } from '@/types';
@@ -18,10 +20,10 @@ function DocumentStatusBadge({ status }: { status: KnowledgeDocument['status'] }
     failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   };
   const labels: Record<KnowledgeDocument['status'], string> = {
-    pending: 'Pending',
-    processing: 'Processing',
-    completed: 'Completed',
-    failed: 'Failed',
+    pending: i18n.t('knowledge.statusPending'),
+    processing: i18n.t('knowledge.statusProcessing'),
+    completed: i18n.t('knowledge.statusCompleted'),
+    failed: i18n.t('knowledge.statusFailed'),
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}>
@@ -31,6 +33,7 @@ function DocumentStatusBadge({ status }: { status: KnowledgeDocument['status'] }
 }
 
 export default function KnowledgePage() {
+  const { t } = useTranslation();
   const {
     bases, currentBase, documents, documentsLoading,
     documentChunks, chunksLoading,
@@ -103,7 +106,7 @@ export default function KnowledgePage() {
       {/* Left sidebar */}
       <div className="w-72 border-r border-border flex flex-col bg-surface">
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold">Knowledge Bases</h2>
+          <h2 className="font-semibold">{t('knowledge.title')}</h2>
           <button
             onClick={() => setShowCreate(true)}
             className="p-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -117,10 +120,10 @@ export default function KnowledgePage() {
         {/* Tabs */}
         <div className="flex border-b border-border">
           <button onClick={() => setActiveTab('bases')} className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'bases' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-secondary'}`}>
-            Bases
+            {t('knowledge.bases')}
           </button>
           <button onClick={() => setActiveTab('search')} className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'search' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-secondary'}`}>
-            Search
+            {t('knowledge.searchTab')}
           </button>
         </div>
 
@@ -128,7 +131,7 @@ export default function KnowledgePage() {
           <div className="flex-1 overflow-y-auto">
             {bases.length === 0 ? (
               <div className="p-4 text-center text-text-secondary text-sm">
-                No knowledge bases yet
+                {t('knowledge.noBases')}
               </div>
             ) : (
               <div className="p-2 space-y-1">
@@ -139,7 +142,7 @@ export default function KnowledgePage() {
                     className={`w-full text-left p-3 rounded-lg transition-colors ${currentBase?.id === kb.id ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-bg'}`}
                   >
                     <p className="font-medium text-sm truncate">{kb.name}</p>
-                    <p className="text-xs text-text-secondary mt-0.5 truncate">{kb.description || 'No description'}</p>
+                    <p className="text-xs text-text-secondary mt-0.5 truncate">{kb.description || t('knowledge.noDescription')}</p>
                     <div className="flex gap-2 mt-1">
                       <span className="text-xs text-text-secondary">{kb._count?.documents || 0} docs</span>
                       <span className="text-xs text-text-secondary">{kb._count?.chunks || 0} chunks</span>
@@ -157,7 +160,7 @@ export default function KnowledgePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search across all knowledge bases..."
+              placeholder={t('knowledge.searchKnowledge')}
               className="input-field"
               onKeyDown={(e) => { if (e.key === 'Enter') search(searchQuery); }}
             />
@@ -166,13 +169,13 @@ export default function KnowledgePage() {
               disabled={!searchQuery.trim() || isSearching}
               className="btn-primary w-full disabled:opacity-50"
             >
-              {isSearching ? 'Searching...' : 'Search'}
+              {isSearching ? t('common.loading') : t('common.search')}
             </button>
             {searchResults.length > 0 && (
               <div className="space-y-2 overflow-y-auto">
                 {searchResults.map((result: any, i: number) => (
                   <div key={i} className="p-3 bg-bg rounded-lg border border-border">
-                    <p className="text-xs text-text-secondary mb-1">{result.metadata?.source || 'Unknown source'}</p>
+                    <p className="text-xs text-text-secondary mb-1">{result.metadata?.source || t('common.unknown') || 'Unknown source'}</p>
                     <p className="text-sm whitespace-pre-wrap">{result.content}</p>
                     {result.score && (
                       <p className="text-xs text-text-secondary mt-1">Score: {(result.score * 100).toFixed(1)}%</p>
@@ -198,7 +201,7 @@ export default function KnowledgePage() {
                 <button
                   onClick={refreshCurrentBase}
                   className="p-1.5 text-text-secondary hover:text-text rounded-lg hover:bg-bg transition-colors"
-                  title="Refresh"
+                  title={t('common.refresh') || 'Refresh'}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -208,7 +211,7 @@ export default function KnowledgePage() {
                   onClick={() => { deleteBase(currentBase.id); setCurrentBase(null); }}
                   className="px-3 py-1.5 text-sm bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -217,12 +220,12 @@ export default function KnowledgePage() {
               {/* Document list */}
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Documents
-                  {documentsLoading && <span className="ml-2 text-xs text-text-secondary">Loading...</span>}
+                  {t('knowledge.documents')}
+                  {documentsLoading && <span className="ml-2 text-xs text-text-secondary">{t('common.loading')}</span>}
                 </h3>
                 {documents.length === 0 && !documentsLoading ? (
                   <div className="text-sm text-text-secondary text-center py-8 border border-dashed border-border rounded-lg">
-                    No documents yet. Upload a file or add text content below.
+                    {t('knowledge.noDocs')}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -258,7 +261,7 @@ export default function KnowledgePage() {
                             <button
                               onClick={() => handleViewContent(doc.id)}
                               className={`p-1.5 rounded transition-colors ${expandedDoc === doc.id ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30' : 'text-text-secondary hover:text-text hover:bg-bg'}`}
-                              title="View extracted content"
+                              title={t('common.view') || 'View'}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -281,19 +284,19 @@ export default function KnowledgePage() {
                             {/* Confirm tooltip */}
                             {confirmDeleteDoc === doc.id && (
                               <div className="absolute right-0 top-full mt-1 z-10 bg-surface border border-border rounded-lg shadow-lg p-2 w-48">
-                                <p className="text-xs text-text-secondary mb-2">Delete this document? The chunks will also be removed.</p>
+                                <p className="text-xs text-text-secondary mb-2">{t('knowledge.deleteConfirm')}</p>
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => setConfirmDeleteDoc(null)}
                                     className="flex-1 px-2 py-1 text-xs rounded bg-bg hover:bg-border transition-colors"
                                   >
-                                    Cancel
+                                    {t('common.cancel')}
                                   </button>
                                   <button
                                     onClick={() => handleDeleteDocument(doc.id)}
                                     className="flex-1 px-2 py-1 text-xs rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
                                   >
-                                    Delete
+                                    {t('common.delete')}
                                   </button>
                                 </div>
                               </div>
@@ -304,7 +307,7 @@ export default function KnowledgePage() {
                         {expandedDoc === doc.id && (
                           <div className="ml-11 mt-1 p-3 bg-surface rounded-lg border border-border text-sm space-y-2">
                             {chunksLoading === doc.id ? (
-                              <p className="text-text-secondary text-xs">Loading content...</p>
+                              <p className="text-text-secondary text-xs">{t('common.loading')}</p>
                             ) : documentChunks[doc.id]?.length > 0 ? (
                               documentChunks[doc.id].map((chunk) => (
                                 <div key={chunk.id} className="p-2 bg-bg rounded border border-border">
@@ -319,7 +322,7 @@ export default function KnowledgePage() {
                                 </div>
                               ))
                             ) : (
-                              <p className="text-text-secondary text-xs">No content extracted (document may be image-based).</p>
+                              <p className="text-text-secondary text-xs">{t('knowledge.noContent')}</p>
                             )}
                           </div>
                         )}
@@ -331,7 +334,7 @@ export default function KnowledgePage() {
 
               {/* Upload section */}
               <div className="border-t border-border pt-4">
-                <h3 className="text-sm font-medium mb-2">Upload Document</h3>
+                <h3 className="text-sm font-medium mb-2">{t('knowledge.uploadDocument')}</h3>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -344,20 +347,20 @@ export default function KnowledgePage() {
                   disabled={uploading}
                   className="btn-secondary w-full disabled:opacity-50"
                 >
-                  {uploading ? 'Uploading...' : 'Upload Document'}
+                  {uploading ? t('common.uploading') : t('knowledge.uploadDocument')}
                 </button>
                 <p className="text-xs text-text-secondary mt-1.5">
-                  Supported: .txt, .md, .pdf (text-based), .csv, .json. Max 10MB.
+                  {t('knowledge.supportedFormats')}
                 </p>
               </div>
 
               {/* Add text section */}
               <div className="border-t border-border pt-4">
-                <h3 className="text-sm font-medium mb-2">Add Text Content</h3>
+                <h3 className="text-sm font-medium mb-2">{t('knowledge.addTextContent')}</h3>
                 <textarea
                   value={addTextContent}
                   onChange={(e) => setAddTextContent(e.target.value)}
-                  placeholder="Paste or type content to add to this knowledge base..."
+                  placeholder={t('knowledge.pasteContent')}
                   className="input-field w-full h-32 resize-none"
                 />
                 <button
@@ -365,7 +368,7 @@ export default function KnowledgePage() {
                   disabled={!addTextContent.trim()}
                   className="btn-primary mt-2 disabled:opacity-50"
                 >
-                  Add Content
+                  {t('common.save')}
                 </button>
               </div>
             </div>
@@ -374,8 +377,8 @@ export default function KnowledgePage() {
           <div className="flex-1 flex items-center justify-center text-text-secondary">
             <div className="text-center">
               <span className="text-5xl mb-3 block">📚</span>
-              <p className="text-lg font-medium mb-1">Knowledge Base</p>
-              <p className="text-sm">Select a knowledge base or create a new one</p>
+              <p className="text-lg font-medium mb-1">{t('knowledge.title')}</p>
+              <p className="text-sm">{t('knowledge.selectKnowledgeBase')}</p>
             </div>
           </div>
         )}
@@ -385,31 +388,31 @@ export default function KnowledgePage() {
       {showCreate && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
           <div className="bg-surface rounded-xl p-6 w-full max-w-md shadow-xl border border-border">
-            <h3 className="font-semibold text-lg mb-4">Create Knowledge Base</h3>
+            <h3 className="font-semibold text-lg mb-4">{t('knowledge.createBase')}</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Name *</label>
+                <label className="block text-sm font-medium mb-1">{t('knowledge.baseName')} *</label>
                 <input
                   type="text"
                   value={newBaseName}
                   onChange={(e) => setNewBaseName(e.target.value)}
                   className="input-field"
-                  placeholder="e.g. Product Documentation"
+                  placeholder={t('knowledge.baseNameExample')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
+                <label className="block text-sm font-medium mb-1">{t('knowledge.kbDescription')}</label>
                 <textarea
                   value={newBaseDesc}
                   onChange={(e) => setNewBaseDesc(e.target.value)}
                   className="input-field resize-none h-20"
-                  placeholder="Optional description..."
+                  placeholder={t('knowledge.descOptional')}
                 />
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowCreate(false)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={handleCreate} disabled={!newBaseName.trim()} className="btn-primary flex-1 disabled:opacity-50">Create</button>
+              <button onClick={() => setShowCreate(false)} className="btn-secondary flex-1">{t('common.cancel')}</button>
+              <button onClick={handleCreate} disabled={!newBaseName.trim()} className="btn-primary flex-1 disabled:opacity-50">{t('common.create')}</button>
             </div>
           </div>
         </div>

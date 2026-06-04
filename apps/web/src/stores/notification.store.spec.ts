@@ -2,9 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockToken = 'mock-token';
 
+// Mock auth store for apiClient interceptor
 vi.mock('./auth.store', () => ({
   useAuthStore: {
     getState: () => ({ accessToken: mockToken }),
+  },
+}));
+
+// Mock apiClient
+const mockGet = vi.fn();
+const mockPost = vi.fn();
+const mockDelete = vi.fn();
+
+vi.mock('@/api/client', () => ({
+  apiClient: {
+    get: (...args: any[]) => mockGet(...args),
+    post: (...args: any[]) => mockPost(...args),
+    delete: (...args: any[]) => mockDelete(...args),
   },
 }));
 
@@ -17,8 +31,6 @@ const mockNotifications: Notification[] = [
 ];
 
 describe('notification.store', () => {
-  const originalFetch = globalThis.fetch;
-
   beforeEach(() => {
     vi.clearAllMocks();
     useNotificationStore.setState({
@@ -26,10 +38,6 @@ describe('notification.store', () => {
       unreadCount: 0,
       isOpen: false,
     });
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
   });
 
   it('should have initial state', () => {
@@ -51,35 +59,41 @@ describe('notification.store', () => {
 
   describe('fetchNotifications', () => {
     it('should fetch and set notifications on success', async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ data: mockNotifications }),
-      });
+      mockGet.mockResolvedValue({ data: mockNotifications });
 
       await useNotificationStore.getState().fetchNotifications();
 
-      expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/notifications', {
-        headers: { Authorization: `Bearer ${mockToken}` },
-      });
+      expect(mockGet).toHaveBeenCalledWith('/notifications');
       expect(useNotificationStore.getState().notifications).toEqual(mockNotifications);
     });
 
     it('should handle fetch failure gracefully', async () => {
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+      mockGet.mockRejectedValue(new Error('Network error'));
 
       await useNotificationStore.getState().fetchNotifications();
 
+      // Should keep existing notifications on error (not clear them)
       expect(useNotificationStore.getState().notifications).toEqual([]);
+    });
+
+    it('should preserve existing notifications on API error', async () => {
+      useNotificationStore.setState({ notifications: mockNotifications, unreadCount: 2 });
+      mockGet.mockRejectedValue(new Error('Network error'));
+
+      await useNotificationStore.getState().fetchNotifications();
+
+      // Should NOT clear notifications on error
+      expect(useNotificationStore.getState().notifications).toEqual(mockNotifications);
     });
   });
 
   describe('fetchUnreadCount', () => {
     it('should fetch and set unread count', async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ data: { count: 5 } }),
-      });
+      mockGet.mockResolvedValue({ data: { count: 5 } });
 
       await useNotificationStore.getState().fetchUnreadCount();
 
+      expect(mockGet).toHaveBeenCalledWith('/notifications/unread-count');
       expect(useNotificationStore.getState().unreadCount).toBe(5);
     });
   });
@@ -87,24 +101,21 @@ describe('notification.store', () => {
   describe('markAsRead', () => {
     it('should mark notification as read', async () => {
       useNotificationStore.setState({ notifications: mockNotifications, unreadCount: 2 });
-      globalThis.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) });
+      mockPost.mockResolvedValue({});
 
       await useNotificationStore.getState().markAsRead('n1');
 
       const state = useNotificationStore.getState();
       expect(state.notifications.find((n) => n.id === 'n1')?.isRead).toBe(true);
       expect(state.unreadCount).toBe(1);
-      expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/notifications/n1/read', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${mockToken}` },
-      });
+      expect(mockPost).toHaveBeenCalledWith('/notifications/n1/read');
     });
   });
 
   describe('markAllAsRead', () => {
     it('should mark all notifications as read', async () => {
       useNotificationStore.setState({ notifications: mockNotifications, unreadCount: 2 });
-      globalThis.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) });
+      mockPost.mockResolvedValue({});
 
       await useNotificationStore.getState().markAllAsRead();
 
@@ -117,7 +128,7 @@ describe('notification.store', () => {
   describe('deleteNotification', () => {
     it('should delete notification and update counts', async () => {
       useNotificationStore.setState({ notifications: mockNotifications, unreadCount: 2 });
-      globalThis.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) });
+      mockDelete.mockResolvedValue({});
 
       await useNotificationStore.getState().deleteNotification('n1');
 
@@ -129,7 +140,7 @@ describe('notification.store', () => {
 
     it('should not decrease unreadCount if deleted notification was already read', async () => {
       useNotificationStore.setState({ notifications: mockNotifications, unreadCount: 2 });
-      globalThis.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) });
+      mockDelete.mockResolvedValue({});
 
       await useNotificationStore.getState().deleteNotification('n2');
 

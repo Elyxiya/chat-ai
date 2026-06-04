@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import MarkdownIt from 'markdown-it';
-
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
-});
+import { renderMarkdown } from '@/utils/markdown';
 
 interface StreamingTextProps {
   content: string;
@@ -86,7 +80,7 @@ export default function StreamingText({
 
   if (!displayedContent) return null;
 
-  const html = md.render(displayedContent);
+  const html = renderMarkdown(displayedContent);
 
   return (
     <div className={`${className} prose prose-sm dark:prose-invert max-w-none`}>

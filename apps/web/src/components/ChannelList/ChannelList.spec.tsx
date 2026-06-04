@@ -88,7 +88,7 @@ describe('ChannelList', () => {
       expect(screen.getByText('Announcements')).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText('Announcements'));
-    expect(mockNavigate).toHaveBeenCalledWith('/chat/channel/ch-1');
+    expect(mockNavigate).toHaveBeenCalledWith('/channel/ch-1');
   });
 
   it('CHANNEL-WEB-07: should show empty state', async () => {

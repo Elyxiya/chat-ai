@@ -106,6 +106,8 @@ export const chatApi = {
   getOnlineUsers: () => apiClient.get('/chat/online-users'),
   manageFriend: (friendId: string, data: { action: 'request' | 'accept' | 'reject' | 'block' }) =>
     apiClient.post(`/chat/friends/${friendId}`, data),
+  removeFriend: (friendId: string) =>
+    apiClient.delete(`/chat/friends/${friendId}`),
   globalSearch: (params: { q: string; sessionId?: string; types?: string; page?: number; limit?: number }) =>
     apiClient.get('/chat/search', { params }),
   forwardMessage: (messageId: string, targetSessionIds: string[]) =>
@@ -159,6 +161,26 @@ export const chatApi = {
     apiClient.post(`/chat/channels/${channelId}/subscribe`),
   unsubscribeChannel: (channelId: string) =>
     apiClient.post(`/chat/channels/${channelId}/unsubscribe`),
+  discoverChannels: (params?: { q?: string; page?: number; limit?: number }) =>
+    apiClient.get('/chat/channels/discover', { params }),
+  inviteToChannel: (channelId: string, userId: string) =>
+    apiClient.post(`/chat/channels/${channelId}/invite`, { userId }),
+  getChannelInvitations: () =>
+    apiClient.get('/chat/channels/invitations'),
+  acceptChannelInvitation: (invitationId: string) =>
+    apiClient.post(`/chat/channels/invitations/${invitationId}/accept`),
+  rejectChannelInvitation: (invitationId: string) =>
+    apiClient.post(`/chat/channels/invitations/${invitationId}/reject`),
+  applyToJoinChannel: (channelId: string, reason?: string) =>
+    apiClient.post(`/chat/channels/${channelId}/apply`, { reason }),
+  getPendingApplications: (channelId: string) =>
+    apiClient.get(`/chat/channels/${channelId}/applications`),
+  approveJoinApplication: (channelId: string, userId: string) =>
+    apiClient.post(`/chat/channels/${channelId}/applications/${userId}/approve`),
+  rejectJoinApplication: (channelId: string, userId: string) =>
+    apiClient.post(`/chat/channels/${channelId}/applications/${userId}/reject`),
+  updateChannelJoinApproval: (channelId: string, mode: string) =>
+    apiClient.patch(`/chat/channels/${channelId}/join-approval`, { mode }),
 };
 
 export const agentApi = {

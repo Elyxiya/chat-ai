@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { chatApi } from '@/api/client';
 import { useChatStore } from '@/stores/chat.store';
 
 export default function ChannelList() {
+  const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
+  const channelRefreshKey = useChatStore((s) => s.channelRefreshKey);
+  const loadSessions = useChatStore((s) => s.loadSessions);
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newIsPublic, setNewIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const loadChannels = async () => {
@@ -24,20 +29,21 @@ export default function ChannelList() {
 
   useEffect(() => {
     loadChannels();
-  }, []);
+  }, [channelRefreshKey]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const res: any = await chatApi.createChannel({ name: newName.trim(), description: newDesc.trim() || undefined });
+      const res: any = await chatApi.createChannel({ name: newName.trim(), description: newDesc.trim() || undefined, isPublic: newIsPublic });
       if (res?.data?.id) {
-        navigate(`/chat/channel/${res.data.id}`);
+        navigate(`/channel/${res.data.id}`);
       }
       setShowCreate(false);
       setNewName('');
       setNewDesc('');
-      await loadChannels();
+      setNewIsPublic(true);
+      await Promise.all([loadChannels(), loadSessions()]);
     } catch { /* ignore */ }
     setCreating(false);
   };
@@ -45,7 +51,7 @@ export default function ChannelList() {
   const handleSubscribe = async (channelId: string) => {
     try {
       await chatApi.subscribeChannel(channelId);
-      navigate(`/chat/channel/${channelId}`);
+      navigate(`/channel/${channelId}`);
       await loadChannels();
     } catch { /* ignore */ }
   };
@@ -92,6 +98,15 @@ export default function ChannelList() {
             placeholder="Description (optional)"
             className="input-field w-full text-xs"
           />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={newIsPublic}
+              onChange={(e) => setNewIsPublic(e.target.checked)}
+              className="accent-primary-600"
+            />
+            <span className="text-xs text-text-secondary">Public channel (visible in Discover)</span>
+          </label>
           <div className="flex gap-1">
             <button
               onClick={handleCreate}
@@ -101,7 +116,7 @@ export default function ChannelList() {
               {creating ? 'Creating...' : 'Create'}
             </button>
             <button
-              onClick={() => { setShowCreate(false); setNewName(''); setNewDesc(''); }}
+              onClick={() => { setShowCreate(false); setNewName(''); setNewDesc(''); setNewIsPublic(true); }}
               className="px-2 py-1 text-xs border border-border rounded hover:bg-border transition-colors"
             >
               Cancel
@@ -124,7 +139,7 @@ export default function ChannelList() {
                 className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${
                   isActive ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700' : 'hover:bg-border/50'
                 }`}
-                onClick={() => navigate(`/chat/channel/${ch.id}`)}
+                onClick={() => navigate(`/channel/${ch.id}`)}
               >
                 <svg className="w-4 h-4 flex-shrink-0 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
@@ -140,6 +155,19 @@ export default function ChannelList() {
             );
           })
         )}
+      </div>
+
+      {/* Discover button */}
+      <div className="px-3 mt-1">
+        <button
+          onClick={() => navigate('/channels/discover')}
+          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-text-secondary hover:text-text hover:bg-border/50 rounded transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span>{t('chat.discoverChannels')}</span>
+        </button>
       </div>
     </div>
   );

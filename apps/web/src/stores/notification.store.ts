@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useAuthStore } from './auth.store';
+import { apiClient } from '@/api/client';
 
 const MAX_NOTIFICATIONS = 100;
 
@@ -35,89 +35,76 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   setOpen: (open) => set({ isOpen: open }),
 
   fetchNotifications: async () => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      const res = await fetch('/api/v1/notifications', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      const loaded = data.data || [];
-      set({ notifications: loaded.length > MAX_NOTIFICATIONS ? loaded.slice(0, MAX_NOTIFICATIONS) : loaded });
-    } catch { /* ignore */ }
+      const result: any = await apiClient.get('/notifications');
+      // apiClient interceptor returns response.data, so result = { code, data, message }
+      const loaded: Notification[] = result?.data || [];
+      const trimmed = loaded.length > MAX_NOTIFICATIONS
+        ? loaded.slice(0, MAX_NOTIFICATIONS)
+        : loaded;
+      set({ notifications: trimmed });
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to fetch notifications:', err);
+      // Do NOT clear notifications on error — preserve WebSocket-added data
+    }
   },
 
   fetchUnreadCount: async () => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      const res = await fetch('/api/v1/notifications/unread-count', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      set({ unreadCount: data.data?.count || 0 });
-    } catch { /* ignore */ }
+      const result: any = await apiClient.get('/notifications/unread-count');
+      set({ unreadCount: result?.data?.count || 0 });
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to fetch unread count:', err);
+    }
   },
 
   markAsRead: async (id) => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      await fetch(`/api/v1/notifications/${id}/read`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiClient.post(`/notifications/${id}/read`);
       set((state) => ({
         notifications: state.notifications.map((n) =>
           n.id === id ? { ...n, isRead: true } : n,
         ),
         unreadCount: Math.max(0, state.unreadCount - 1),
       }));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to mark notification as read:', err);
+    }
   },
 
   markAllAsRead: async () => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      await fetch('/api/v1/notifications/read-all', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiClient.post('/notifications/read-all');
       set((state) => ({
         notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
         unreadCount: 0,
       }));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to mark all as read:', err);
+    }
   },
 
   deleteNotification: async (id) => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      await fetch(`/api/v1/notifications/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiClient.delete(`/notifications/${id}`);
       set((state) => ({
         notifications: state.notifications.filter((n) => n.id !== id),
         unreadCount: state.notifications.find((n) => n.id === id && !n.isRead)
           ? state.unreadCount - 1
           : state.unreadCount,
       }));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to delete notification:', err);
+    }
   },
 
   deleteAll: async () => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) return;
     try {
-      await fetch('/api/v1/notifications', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiClient.delete('/notifications');
       set({ notifications: [], unreadCount: 0 });
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('[NotificationStore] Failed to delete all notifications:', err);
+    }
   },
 
   addNotification: (notification) => {

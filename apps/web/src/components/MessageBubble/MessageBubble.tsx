@@ -1,18 +1,14 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
-import MarkdownIt from 'markdown-it';
+import { useTranslation } from 'react-i18next';
+import { renderMarkdown } from '@/utils/markdown';
+import { chatApi } from '@/api/client';
 import { ChatMessage } from '@/types';
 import { format } from 'date-fns';
-import { chatApi } from '@/api/client';
 import FilePreviewModal from '../FilePreviewModal/FilePreviewModal';
 import LazyImage from '../LazyImage/LazyImage';
 import ReadReceiptPanel from '../ReadReceiptPanel/ReadReceiptPanel';
 import EmojiPicker from '../EmojiPicker/EmojiPicker';
 
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
-});
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -33,6 +29,7 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, onEdit, bookmarked, sessionMembersCount }: MessageBubbleProps) {
+  const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [showReadReceipts, setShowReadReceipts] = useState(false);
@@ -59,7 +56,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
     if (message.isRecalled) {
       return (
         <p className="text-text-secondary italic text-sm">
-          This message has been recalled
+          {t('chat.messageRecalled')}
         </p>
       );
     }
@@ -77,7 +74,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
     }
 
     if (message.contentType === 'file') {
-      const fileName = message.metadata?.fileName || 'Download file';
+      const fileName = message.metadata?.fileName || t('chat.downloadFile');
       return (
         <button
           onClick={() => setPreviewSrc(message.content)}
@@ -158,14 +155,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
         <div className={`flex items-center gap-2 mt-1 px-1 ${isOwn ? 'justify-end' : ''}`}>
           <span className="text-xs text-text-secondary">
             {format(new Date(message.createdAt), 'HH:mm')}
-            {message.editCount && message.editCount > 0 ? ' · edited' : ''}
+            {message.editCount && message.editCount > 0 ? ` · ${t('chat.messageEdited')}` : ''}
           </span>
           {isOwn && sessionMembersCount && sessionMembersCount > 2 && (
             <button
               onClick={(e) => { e.stopPropagation(); setShowReadReceipts(true); }}
               className="text-xs text-text-secondary hover:text-primary-600 transition-colors"
             >
-              Read
+              {t('chat.read')}
             </button>
           )}
           {message.reactions && message.reactions.length > 0 && (
@@ -194,19 +191,19 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
               onClick={() => { setShowReactions(!showReactions); setShowMenu(false); }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
-              <span>Add Reaction</span>
+              <span>{t('chat.addReaction')}</span>
             </button>
             <button
               onClick={() => { if (onReply) { onReply(); } setShowMenu(false); }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
-              <span>Reply</span>
+              <span>{t('chat.reply')}</span>
             </button>
             <button
               onClick={() => { if (onForward) { onForward(); } setShowMenu(false); }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
-              <span>Forward</span>
+              <span>{t('chat.forward')}</span>
             </button>
             <button
               onClick={() => {
@@ -219,14 +216,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
               }}
               className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
             >
-              <span>{bookmarked ? 'Remove Bookmark' : 'Bookmark'}</span>
+              <span>{bookmarked ? t('chat.removeBookmark') : t('chat.bookmark')}</span>
             </button>
             {isOwn && onEdit && (
               <button
                 onClick={() => { if (onEdit) { onEdit(); } setShowMenu(false); }}
                 className="w-full px-3 py-1.5 text-left text-sm hover:bg-bg flex items-center gap-2"
               >
-                <span>Edit</span>
+                <span>{t('chat.editMessage')}</span>
               </button>
             )}
           </div>
@@ -246,7 +243,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
         {showBookmarkDialog && (
           <div className="absolute z-10 mt-1 right-0">
             <div className="bg-surface border border-border rounded-lg shadow-lg p-3 min-w-[200px]">
-              <p className="text-xs font-medium text-text-secondary mb-2">Add tags (optional)</p>
+              <p className="text-xs font-medium text-text-secondary mb-2">{t('chat.addTags') || 'Add tags (optional)'}</p>
               <input
                 type="text"
                 value={bookmarkTags}
@@ -268,11 +265,11 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
                     setBookmarkTags('');
                   }
                 }}
-                placeholder="work, important, ..."
+                placeholder={t('chat.tagPlaceholder')}
                 className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                 autoFocus
               />
-              <p className="text-[10px] text-text-secondary mt-1">Separate tags with commas, press Enter to save</p>
+              <p className="text-[10px] text-text-secondary mt-1">{t('chat.tagHint')}</p>
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => {
@@ -288,7 +285,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
                   }}
                   className="px-3 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
                 >
-                  Save
+                  {t('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -298,7 +295,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
                   }}
                   className="px-3 py-1 text-xs text-text-secondary hover:text-text transition-colors"
                 >
-                  Skip
+                  {t('common.skip')}
                 </button>
                 <button
                   onClick={() => {
@@ -307,7 +304,7 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
                   }}
                   className="px-3 py-1 text-xs text-text-secondary hover:text-text transition-colors"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -348,7 +345,7 @@ function renderContentWithMentions(content: string): React.ReactNode {
 
 function StreamingMarkdown({ text }: { text: string }) {
   const html = useMemo(() => {
-    return md.render(text);
+    return renderMarkdown(text);
   }, [text]);
 
   return (

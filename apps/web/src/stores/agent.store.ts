@@ -3,6 +3,23 @@ import { AgentMessage, AgentResponse } from '@/types';
 import { agentApi } from '@/api/client';
 import { useAuthStore } from './auth.store';
 
+/** Strip internal ReAct/LLM format markers from agent output for user-facing display */
+function cleanAgentContent(content: string): string {
+  if (!content) return content;
+  let cleaned = content;
+  // Strip DeepSeek R1 <think>...</think> blocks
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  // Extract content from <final_answer>...</final_answer>
+  cleaned = cleaned.replace(/<final_answer>\s*([\s\S]*?)\s*<\/final_answer>/gi, '$1').trim();
+  // If "最终答案：" is present, take the last occurrence (text after it)
+  const finalIdx = Math.max(cleaned.lastIndexOf('最终答案：'), cleaned.lastIndexOf('最终答案:'));
+  if (finalIdx !== -1) {
+    const after = cleaned.slice(finalIdx + 5).trim(); // "最终答案" is 4 chars + 1 colon = 5
+    if (after) return after;
+  }
+  return cleaned;
+}
+
 interface ToolCallEntry {
   name: string;
   args: Record<string, any>;
@@ -209,27 +226,25 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   }
                   break;
 
-                // 'final' events also carry content — emit as chunk first
+                // 'final': content already accumulated via 'chunk' events — only finalize state
                 case 'final':
-                case 'thinking_done':
                   if (!hasFinalized) {
-                    const incoming = event.type === 'final' ? event.data?.content : event.data?.reasoning;
-                    if (incoming) {
-                      fullContent += incoming;
-                      set({ streamingContent: fullContent });
-                    }
-                    if (event.type === 'final') {
-                      fullReasoning = event.data?.reasoning || fullReasoning;
-                      hasFinalized = true;
-                    }
+                    fullReasoning = event.data?.reasoning || fullReasoning;
+                    hasFinalized = true;
                   }
                   break;
 
+                // 'thinking_done': reasoning already tracked via 'reasoning'/'thinking' events —
+                // do NOT append to fullContent (that would leak reasoning into the chat bubble)
+                case 'thinking_done':
+                  break;
+
                 case 'done': {
-                  if (hasFinalized || fullContent) {
+                  const cleaned = cleanAgentContent(fullContent);
+                  if (hasFinalized || cleaned) {
                     const assistantMsg: AgentMessage = {
                       role: 'assistant',
-                      content: fullContent,
+                      content: cleaned,
                       timestamp: Date.now(),
                       metadata: {
                         reasoning: fullReasoning,

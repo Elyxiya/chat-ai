@@ -106,7 +106,7 @@ export class ToolRegistry {
           data: {
             sessionType,
             name,
-            ownerId: ctx.userId,
+            owner: { connect: { id: ctx.userId } },
             members: {
               create: [
                 { userId: ctx.userId, role: 'owner' },

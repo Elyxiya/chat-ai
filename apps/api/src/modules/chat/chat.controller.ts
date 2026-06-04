@@ -87,6 +87,102 @@ export class ChatController {
     return success(await this.chatService.unsubscribeChannel(userId, channelId));
   }
 
+  @Get('channels/discover')
+  @ApiOperation({ summary: 'Discover public channels' })
+  async discoverChannels(
+    @CurrentUser('id') userId: string,
+    @Query('q') query?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return success(await this.chatService.discoverChannels(userId, query, page || 1, limit || 20));
+  }
+
+  @Post('channels/:channelId/invite')
+  @ApiOperation({ summary: 'Invite a user to a channel' })
+  async inviteToChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+    @Body() body: { userId: string },
+  ) {
+    return success(await this.chatService.inviteToChannel(userId, channelId, body.userId));
+  }
+
+  @Get('channels/invitations')
+  @ApiOperation({ summary: 'Get my pending channel invitations' })
+  async getChannelInvitations(@CurrentUser('id') userId: string) {
+    return success(await this.chatService.getChannelInvitations(userId));
+  }
+
+  @Post('channels/invitations/:invitationId/accept')
+  @ApiOperation({ summary: 'Accept a channel invitation' })
+  async acceptChannelInvitation(
+    @CurrentUser('id') userId: string,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return success(await this.chatService.acceptChannelInvitation(userId, invitationId));
+  }
+
+  @Post('channels/invitations/:invitationId/reject')
+  @ApiOperation({ summary: 'Reject a channel invitation' })
+  async rejectChannelInvitation(
+    @CurrentUser('id') userId: string,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return success(await this.chatService.rejectChannelInvitation(userId, invitationId));
+  }
+
+  // ======== Channel Join Approval (Phase 2) ========
+
+  @Post('channels/:channelId/apply')
+  @ApiOperation({ summary: 'Apply to join a channel' })
+  async applyToJoinChannel(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return success(await this.chatService.applyToJoinChannel(userId, channelId, body.reason));
+  }
+
+  @Get('channels/:channelId/applications')
+  @ApiOperation({ summary: 'Get pending join applications' })
+  async getPendingApplications(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return success(await this.chatService.getPendingApplications(userId, channelId));
+  }
+
+  @Post('channels/:channelId/applications/:userId/approve')
+  @ApiOperation({ summary: 'Approve a join application' })
+  async approveJoinApplication(
+    @CurrentUser('id') adminId: string,
+    @Param('channelId') channelId: string,
+    @Param('userId') applicantUserId: string,
+  ) {
+    return success(await this.chatService.approveJoinApplication(adminId, channelId, applicantUserId));
+  }
+
+  @Post('channels/:channelId/applications/:userId/reject')
+  @ApiOperation({ summary: 'Reject a join application' })
+  async rejectJoinApplication(
+    @CurrentUser('id') adminId: string,
+    @Param('channelId') channelId: string,
+    @Param('userId') applicantUserId: string,
+  ) {
+    return success(await this.chatService.rejectJoinApplication(adminId, channelId, applicantUserId));
+  }
+
+  @Patch('channels/:channelId/join-approval')
+  @ApiOperation({ summary: 'Update channel join approval mode' })
+  async updateChannelJoinApproval(
+    @CurrentUser('id') userId: string,
+    @Param('channelId') channelId: string,
+    @Body() body: { mode: string },
+  ) {
+    return success(await this.chatService.updateChannelJoinApproval(userId, channelId, body.mode));
+  }
+
   // ======== Session Routes ========
 
   @Get('sessions')
@@ -301,6 +397,16 @@ export class ChatController {
     return success(
       await this.chatService.manageFriend(userId, friendId, body.action),
     );
+  }
+
+  @Delete('friends/:friendId')
+  @ApiOperation({ summary: 'Remove friend (unfriend)' })
+  async removeFriend(
+    @CurrentUser('id') userId: string,
+    @Param('friendId') friendId: string,
+  ) {
+    await this.chatService.removeFriend(userId, friendId);
+    return success(null, 'Friend removed');
   }
 
   @Get('users/search')

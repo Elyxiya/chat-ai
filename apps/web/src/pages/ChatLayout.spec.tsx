@@ -65,6 +65,18 @@ vi.mock('@/components/SessionList/SessionList', () => ({
   default: () => <div data-testid="session-list">SessionList</div>,
 }));
 
+vi.mock('@/stores/friend.store', () => ({
+  useFriendStore: vi.fn(() => ({
+    friends: [],
+    isLoading: false,
+    fetchFriends: vi.fn(),
+  })),
+}));
+
+vi.mock('@/components/FriendList/FriendList', () => ({
+  default: () => <div data-testid="friend-list">FriendList</div>,
+}));
+
 vi.mock('@/components/NotificationPanel/NotificationPanel', () => ({
   default: () => <div data-testid="notification-panel">NotificationPanel</div>,
 }));
@@ -140,7 +152,7 @@ describe('ChatLayout', () => {
       );
     });
 
-    expect(screen.getByText('Chats')).toBeInTheDocument();
+    expect(screen.getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('AI Agent')).toBeInTheDocument();
     expect(screen.getByText('Knowledge Base')).toBeInTheDocument();
   });

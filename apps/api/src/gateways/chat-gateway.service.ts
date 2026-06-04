@@ -69,7 +69,7 @@ export class ChatGatewayService {
         data: {
           sessionType: 'agent',
           name: 'AI Assistant',
-          ownerId: userId,
+          owner: { connect: { id: userId } },
           members: {
             create: { userId, role: 'owner' },
           },

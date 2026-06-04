@@ -7,6 +7,9 @@ export enum NotificationType {
   MESSAGE = 'message',
   MENTION = 'mention',
   SYSTEM = 'system',
+  CHANNEL_INVITATION = 'channel_invitation',
+  JOIN_REQUEST = 'join_request',
+  JOIN_APPROVED = 'join_approved',
 }
 
 export class CreateNotificationDto {

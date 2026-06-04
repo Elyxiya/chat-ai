@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/auth.store';
 import { userApi } from '@/api/client';
 
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user, setUser } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,11 +75,11 @@ export default function ProfilePage() {
     setPasswordSuccess(false);
 
     if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+      setPasswordError(t('settings.passwordMinLength'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match');
+      setPasswordError(t('settings.passwordMismatch'));
       return;
     }
 
@@ -91,7 +93,7 @@ export default function ProfilePage() {
       setConfirmPassword('');
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err: any) {
-      setPasswordError(err?.response?.data?.message || 'Failed to change password');
+      setPasswordError(err?.response?.data?.message || t('agent.error'));
     }
     setChangingPassword(false);
   };
@@ -105,7 +107,7 @@ export default function ProfilePage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="font-semibold text-sm">Profile Settings</h1>
+        <h1 className="font-semibold text-sm">{t('profile.title')}</h1>
       </header>
 
       <div className="flex-1 overflow-y-auto">
@@ -132,19 +134,19 @@ export default function ProfilePage() {
               onChange={handleAvatarChange}
             />
             <button onClick={handleAvatarSelect} className="text-sm text-primary-600 hover:underline" disabled={uploading}>
-              {uploading ? 'Uploading...' : 'Change avatar'}
+              {uploading ? t('common.uploading') : t('profile.changeAvatar')}
             </button>
           </div>
 
           {/* Status */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Status</h3>
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">{t('profile.status')}</h3>
             <div className="flex gap-2">
               {[
-                { value: 'online', label: 'Online', color: 'bg-green-500' },
-                { value: 'away', label: 'Away', color: 'bg-yellow-500' },
-                { value: 'busy', label: 'Busy', color: 'bg-red-500' },
-                { value: 'invisible', label: 'Invisible', color: 'bg-gray-400' },
+                { value: 'online', label: t('profile.online'), color: 'bg-green-500' },
+                { value: 'away', label: t('profile.away'), color: 'bg-yellow-500' },
+                { value: 'busy', label: t('profile.busy'), color: 'bg-red-500' },
+                { value: 'invisible', label: t('profile.invisible'), color: 'bg-gray-400' },
               ].map((opt) => (
                 <button
                   key={opt.value}
@@ -164,36 +166,36 @@ export default function ProfilePage() {
 
           {/* Profile Info */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Profile Info</h3>
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">{t('profile.profileInfo')}</h3>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Username</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('auth.username')}</label>
               <input type="text" value={user?.username || ''} disabled className="input-field w-full text-sm bg-bg/50" />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Email</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('auth.email')}</label>
               <input type="email" value={user?.email || ''} disabled className="input-field w-full text-sm bg-bg/50" />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Nickname</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('profile.nickname')}</label>
               <input
                 type="text"
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
-                placeholder="Set a display name"
+                placeholder={t('profile.nicknamePlaceholder')}
                 className="input-field w-full text-sm"
                 maxLength={30}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Bio</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('profile.bio')}</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="Tell us about yourself..."
+                placeholder={t('profile.bioPlaceholder')}
                 className="input-field w-full text-sm resize-none"
                 rows={3}
                 maxLength={200}
@@ -206,16 +208,16 @@ export default function ProfilePage() {
               disabled={saving}
               className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors text-sm font-medium"
             >
-              {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Profile'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
           </div>
 
           {/* Change Password */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Change Password</h3>
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">{t('settings.changePassword')}</h3>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Current Password</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('settings.currentPassword')}</label>
               <input
                 type="password"
                 value={currentPassword}
@@ -225,7 +227,7 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">New Password</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('settings.newPassword')}</label>
               <input
                 type="password"
                 value={newPassword}
@@ -235,7 +237,7 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Confirm New Password</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">{t('settings.confirmNewPassword')}</label>
               <input
                 type="password"
                 value={confirmPassword}
@@ -248,7 +250,7 @@ export default function ProfilePage() {
               <p className="text-xs text-red-500">{passwordError}</p>
             )}
             {passwordSuccess && (
-              <p className="text-xs text-green-500">Password changed successfully</p>
+              <p className="text-xs text-green-500">{t('settings.passwordChanged')}</p>
             )}
 
             <button
@@ -256,14 +258,14 @@ export default function ProfilePage() {
               disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
               className="w-full px-4 py-2 bg-bg border border-border rounded-lg hover:bg-border disabled:opacity-50 transition-colors text-sm font-medium"
             >
-              {changingPassword ? 'Changing...' : 'Change Password'}
+              {changingPassword ? t('common.saving') : t('settings.changePassword')}
             </button>
           </div>
 
           {/* Account Info */}
           <div className="space-y-2 text-xs text-text-secondary">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Account</h3>
-            <p>Member since: {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</p>
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">{t('profile.title')}</h3>
+            <p>{t('profile.joined')}: {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</p>
           </div>
         </div>
       </div>

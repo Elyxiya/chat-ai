@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAgentStore } from '@/stores/agent.store';
+import { renderMarkdown } from '@/utils/markdown';
 import ThinkingChain from '@/components/AgentPanel/ThinkingChain/ThinkingChain';
 import ToolCallLog from '@/components/AgentPanel/ToolCallLog/ToolCallLog';
 import StreamingText from '@/components/AgentPanel/StreamingText/StreamingText';
 
 export default function EnhancedAgentPage() {
+  const { t } = useTranslation();
   const {
     messages,
     streamingContent,
@@ -53,9 +56,9 @@ export default function EnhancedAgentPage() {
               AI
             </div>
             <div>
-              <h2 className="font-semibold">DeepSeek AI Agent</h2>
+              <h2 className="font-semibold">{t('agent.title')}</h2>
               <p className="text-xs text-text-secondary">
-                {isStreaming ? 'Generating...' : 'Ready'}
+                {isStreaming ? t('agent.generating') : t('agent.ready')}
               </p>
             </div>
           </div>
@@ -67,15 +70,15 @@ export default function EnhancedAgentPage() {
               onChange={(e) => setMode(e.target.value as 'react' | 'planner' | 'reasoner')}
               className="text-sm bg-bg border border-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
-              <option value="react">ReAct</option>
-              <option value="planner">规划</option>
-              <option value="reasoner">推理</option>
+              <option value="react">{t('agent.modeReact')}</option>
+              <option value="planner">{t('agent.modePlanner')}</option>
+              <option value="reasoner">{t('agent.modeReasoner')}</option>
             </select>
 
             <button
               onClick={() => setShowThinking(!showThinking)}
               className={`p-1.5 rounded-lg transition-colors ${showThinking ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30' : 'text-text-secondary hover:bg-border'}`}
-              title="Toggle thinking chain"
+              title={t('agent.toggleThinking')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -85,7 +88,7 @@ export default function EnhancedAgentPage() {
             <button
               onClick={() => setShowTools(!showTools)}
               className={`p-1.5 rounded-lg transition-colors ${showTools ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30' : 'text-text-secondary hover:bg-border'}`}
-              title="Toggle tool calls"
+              title={t('agent.toggleTools')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -95,7 +98,7 @@ export default function EnhancedAgentPage() {
             <button
               onClick={clearHistory}
               className="p-1.5 text-text-secondary hover:bg-border rounded-lg transition-colors"
-              title="Clear history"
+              title={t('agent.clearHistory')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -114,7 +117,7 @@ export default function EnhancedAgentPage() {
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
                 )}
               </div>
             </div>
@@ -138,7 +141,7 @@ export default function EnhancedAgentPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Ask the AI agent anything (${mode === 'react' ? 'ReAct' : mode === 'reasoner' ? 'DeepSeek-R1' : 'Plan mode'})...`}
+              placeholder={t('agent.askPlaceholder') || `Ask the AI agent anything (${mode === 'react' ? 'ReAct' : mode === 'reasoner' ? 'DeepSeek-R1' : 'Plan mode'})...`}
               className="input-field flex-1 resize-none min-h-[44px] max-h-32"
               rows={1}
               disabled={isStreaming}
@@ -151,9 +154,9 @@ export default function EnhancedAgentPage() {
               {isStreaming ? (
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  Stop
+                  <span>{t('agent.stop')}</span>
                 </span>
-              ) : 'Send'}
+              ) : t('agent.send')}
             </button>
           </div>
         </div>
@@ -165,7 +168,7 @@ export default function EnhancedAgentPage() {
           {showThinking && (
             <div className="flex-1 border-b border-border overflow-y-auto">
               <div className="p-3 border-b border-border sticky top-0 bg-surface">
-                <h3 className="text-sm font-medium">Thinking Chain</h3>
+                <h3 className="text-sm font-medium">{t('agent.thinkingChain')}</h3>
               </div>
               <div className="p-3">
                 <ThinkingChain steps={reasoningSteps} />
@@ -176,7 +179,7 @@ export default function EnhancedAgentPage() {
           {showTools && (
             <div className="flex-1 overflow-y-auto">
               <div className="p-3 border-b border-border sticky top-0 bg-surface">
-                <h3 className="text-sm font-medium">Tool Calls</h3>
+                <h3 className="text-sm font-medium">{t('agent.toolCalls')}</h3>
               </div>
               <div className="p-3">
                 <ToolCallLog />

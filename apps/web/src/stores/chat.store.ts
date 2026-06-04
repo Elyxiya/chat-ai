@@ -3,6 +3,8 @@ import { ChatSession, ChatMessage, WsMessageType } from '@/types';
 import { chatApi } from '@/api/client';
 import { io, Socket } from 'socket.io-client';
 import { useNotificationStore } from './notification.store';
+import { useFriendStore } from './friend.store';
+import { useAuthStore } from './auth.store';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
 
@@ -10,6 +12,7 @@ interface ChatState {
   sessions: ChatSession[];
   activeSessionId: string | null;
   messages: Record<string, ChatMessage[]>;
+  messagesError: string | null;
   onlineUsers: Set<string>;
   typingUsers: Record<string, { userId: string; username: string }[]>;
   isLoading: boolean;
@@ -37,20 +40,40 @@ interface ChatState {
   toggleBatchMode: () => void;
   toggleMessageSelection: (messageId: string) => void;
   clearSelection: () => void;
+
+  // Used by ChannelList and ChannelDiscoveryPage to trigger sidebar refresh
+  channelRefreshKey: number;
+  triggerChannelRefresh: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   messages: {},
+  messagesError: null,
   onlineUsers: new Set(),
   typingUsers: {},
   isLoading: false,
   socket: null,
   batchMode: false,
   selectedMessageIds: new Set<string>(),
+  channelRefreshKey: 0,
+
+  triggerChannelRefresh: () => set((state) => ({ channelRefreshKey: state.channelRefreshKey + 1 })),
 
   connect: (token) => {
+    const existing = get().socket;
+    if (existing?.connected) {
+      // Already connected — just update auth token if needed
+      if (existing.auth && (existing.auth as any).token !== token) {
+        existing.auth = { token };
+      }
+      return;
+    }
+    if (existing) {
+      existing.disconnect();
+    }
+
     const socket = io(`${WS_URL}/chat`, {
       auth: { token },
       transports: ['websocket'],
@@ -60,15 +83,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     socket.on('connect', () => {
+      // Re-join all session rooms on (re)connect — Socket.IO loses rooms on disconnect
+      const currentSessions = get().sessions;
+      for (const s of currentSessions) {
+        socket.emit('join_session', { sessionId: s.id });
+      }
+    });
+
+    socket.on('initial_online_users', ({ userIds }: { userIds: string[] }) => {
+      set({ onlineUsers: new Set(userIds) });
     });
 
     socket.on('message', (msg: ChatMessage) => {
-      const { messages, activeSessionId } = get();
+      const state = get();
+      const { messages, activeSessionId } = state;
       const sessionMsgs = messages[msg.sessionId] || [];
+
+      // Remove optimistic temp messages from the same sender in this session
+      const filtered = sessionMsgs.filter(
+        (m) => !(m.id.startsWith('temp-') && m.senderId === msg.senderId),
+      );
+
       set({
         messages: {
           ...messages,
-          [msg.sessionId]: [...sessionMsgs, msg],
+          [msg.sessionId]: [...filtered, msg],
         },
       });
       if (msg.sessionId !== activeSessionId) {
@@ -168,6 +207,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       useNotificationStore.getState().addNotification(notification);
     });
 
+    socket.on('friendship_updated', (_data: any) => {
+      // Friendship status changed — reload sessions and friend list
+      get().loadSessions();
+      useFriendStore.getState().fetchFriends();
+    });
+
     socket.on('disconnect', () => {
     });
 
@@ -184,7 +229,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res: any = await chatApi.getSessions();
-      set({ sessions: res.data || [], isLoading: false });
+      const sessions = res.data || [];
+      set({ sessions, isLoading: false });
+      // Auto-join all session rooms so the user receives real-time messages
+      // without needing to click into each session first
+      const socket = get().socket;
+      if (socket?.connected) {
+        for (const s of sessions) {
+          socket.emit('join_session', { sessionId: s.id });
+        }
+      }
     } catch {
       set({ isLoading: false });
     }
@@ -200,22 +254,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadMessages: async (sessionId, params) => {
     try {
+      set({ messagesError: null });
       const res: any = await chatApi.getMessages(sessionId, params);
       const msgs = (res.data || []).reverse();
       set((state) => ({
         messages: { ...state.messages, [sessionId]: msgs },
+        messagesError: null,
       }));
-    } catch {
-      // ignore
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to load messages';
+      set({ messagesError: msg });
     }
   },
 
   sendMessage: (sessionId, content, contentType = 'text') => {
-    const { socket } = get();
+    const { socket, messages } = get();
     if (!socket) return;
+
+    // Optimistic update — show message immediately in the UI
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const user = useAuthStore.getState().user;
+    const optimisticMsg = {
+      id: tempId,
+      sessionId,
+      senderId: user?.id || null,
+      content,
+      contentType: contentType as any,
+      metadata: {},
+      isRecalled: false,
+      isPinned: false,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      reactions: [],
+      sender: user ? {
+        id: user.id,
+        username: user.username,
+        nickname: user.nickname,
+        avatarUrl: user.avatarUrl,
+      } : null,
+    } as unknown as ChatMessage;
+
+    set({
+      messages: {
+        ...messages,
+        [sessionId]: [...(messages[sessionId] || []), optimisticMsg],
+      },
+    });
+
+    // Emit to server
     socket.emit('message', {
       type: WsMessageType.TEXT,
-      data: { sessionId, content, contentType },
+      data: { sessionId, content, contentType, _tempId: tempId },
       timestamp: Date.now(),
     });
   },
@@ -253,23 +342,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   editMessage: async (sessionId, messageId, content) => {
     const { socket } = get();
+    // Optimistic update — show edited content immediately
+    set((state) => {
+      const msgs = state.messages[sessionId];
+      if (!msgs) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [sessionId]: msgs.map((m) =>
+            m.id === messageId ? { ...m, content, editCount: (m.editCount || 0) + 1 } : m,
+          ),
+        },
+      };
+    });
     if (socket?.connected) {
       socket.emit('edit_message', { messageId, sessionId, content });
     } else {
       await chatApi.editMessage(messageId, content);
-      const updated = await chatApi.editMessage(messageId, content);
-      set((state) => {
-        const msgs = state.messages[sessionId];
-        if (!msgs) return state;
-        return {
-          messages: {
-            ...state.messages,
-            [sessionId]: msgs.map((m) =>
-              m.id === messageId ? { ...m, content, editCount: (m.editCount || 0) + 1 } : m,
-            ),
-          },
-        };
-      });
     }
   },
 

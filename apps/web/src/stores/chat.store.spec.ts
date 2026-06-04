@@ -51,6 +51,14 @@ vi.mock('socket.io-client', () => ({
   io: vi.fn(() => mockSocket),
 }));
 
+vi.mock('@/stores/auth.store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: { id: 'user-1', username: 'testuser', nickname: 'Test', avatarUrl: null },
+    }),
+  },
+}));
+
 import { chatApi } from '@/api/client';
 
 describe('chat.store', () => {
@@ -171,7 +179,11 @@ describe('chat.store', () => {
 
       expect(mockSocket.emit).toHaveBeenCalledWith('message', expect.objectContaining({
         type: 2,
-        data: { sessionId: 'session-1', content: 'Hello world', contentType: 'text' },
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          content: 'Hello world',
+          contentType: 'text',
+        }),
       }));
     });
 

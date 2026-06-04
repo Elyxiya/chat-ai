@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { adminApi } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNavigate } from 'react-router-dom';
@@ -42,6 +43,7 @@ interface AdminStats {
 type Tab = 'users' | 'settings' | 'logs';
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -60,21 +62,21 @@ export default function AdminPage() {
   if (!user || user.role !== 'admin') return null;
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'users', label: 'Users' },
-    { key: 'settings', label: 'Settings' },
-    { key: 'logs', label: 'Audit Logs' },
+    { key: 'users', label: t('admin.users') },
+    { key: 'settings', label: t('admin.settings') },
+    { key: 'logs', label: t('admin.auditLogs') },
   ];
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border">
-        <h1 className="text-xl font-bold">Admin Panel</h1>
+        <h1 className="text-xl font-bold">{t('admin.title')}</h1>
         {stats && (
           <div className="flex gap-6 mt-2 text-sm text-text-secondary">
-            <span>{stats.userCount} users</span>
-            <span>{stats.sessionCount} sessions</span>
-            <span>{stats.messageCount} messages</span>
+            <span>{stats.userCount} {t('admin.users')}</span>
+            <span>{stats.sessionCount} {t('chat.chats') || 'sessions'}</span>
+            <span>{stats.messageCount} {t('admin.messages')}</span>
           </div>
         )}
       </div>
@@ -107,6 +109,7 @@ export default function AdminPage() {
 }
 
 function UserManagement() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -139,7 +142,7 @@ function UserManagement() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Delete this user and all their data? This cannot be undone.')) return;
+    if (!confirm(t('admin.deleteConfirm'))) return;
     await adminApi.deleteUser(userId);
     fetchUsers();
   };
@@ -150,23 +153,23 @@ function UserManagement() {
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by username, email or nickname..."
+          placeholder={t('chat.searchUsers')}
           className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
-        <span className="text-sm text-text-secondary">{total} users</span>
+        <span className="text-sm text-text-secondary">{total} {t('admin.users')}</span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-text-secondary">
-              <th className="pb-2 font-medium">Username</th>
-              <th className="pb-2 font-medium">Email</th>
-              <th className="pb-2 font-medium">Role</th>
-              <th className="pb-2 font-medium">Status</th>
-              <th className="pb-2 font-medium">Messages</th>
-              <th className="pb-2 font-medium">Joined</th>
-              <th className="pb-2 font-medium">Actions</th>
+              <th className="pb-2 font-medium">{t('admin.username')}</th>
+              <th className="pb-2 font-medium">{t('admin.email')}</th>
+              <th className="pb-2 font-medium">{t('admin.role')}</th>
+              <th className="pb-2 font-medium">{t('admin.status')}</th>
+              <th className="pb-2 font-medium">{t('admin.messages')}</th>
+              <th className="pb-2 font-medium">{t('admin.joined')}</th>
+              <th className="pb-2 font-medium">{t('admin.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -212,26 +215,26 @@ function UserManagement() {
                           : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-200'
                       }`}
                     >
-                      {u.status === 'banned' ? 'Unban' : 'Ban'}
+                      {u.status === 'banned' ? t('admin.unban') : t('admin.ban')}
                     </button>
                     <button
                       onClick={() => handleRole(u.id, u.role)}
                       className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 transition-colors"
                     >
-                      {u.role === 'admin' ? 'Demote' : 'Make Admin'}
+                      {u.role === 'admin' ? t('admin.demote') : t('admin.makeAdmin')}
                     </button>
                     <button
                       onClick={() => handleDelete(u.id)}
                       className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-text-secondary rounded hover:bg-red-100 hover:text-red-600 transition-colors"
                     >
-                      Delete
+                      {t('admin.deleteUser')}
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
             {users.length === 0 && !loading && (
-              <tr><td colSpan={7} className="py-8 text-center text-text-secondary">No users found</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-text-secondary">{t('admin.noUsers')}</td></tr>
             )}
           </tbody>
         </table>
@@ -241,7 +244,7 @@ function UserManagement() {
       {total > limit && (
         <div className="flex items-center justify-between mt-4">
           <span className="text-sm text-text-secondary">
-            Page {page} of {Math.ceil(total / limit)}
+            {t('admin.pageOf', { page, totalPages: Math.ceil(total / limit) })}
           </span>
           <div className="flex gap-2">
             <button
@@ -249,14 +252,14 @@ function UserManagement() {
               onClick={() => setPage((p) => p - 1)}
               className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface"
             >
-              Previous
+              {t('admin.previous')}
             </button>
             <button
               disabled={page >= Math.ceil(total / limit)}
               onClick={() => setPage((p) => p + 1)}
               className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface"
             >
-              Next
+              {t('admin.next')}
             </button>
           </div>
         </div>
@@ -266,6 +269,7 @@ function UserManagement() {
 }
 
 function SettingsPanel() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
@@ -295,12 +299,12 @@ function SettingsPanel() {
   return (
     <div>
       <div className="mb-6 p-4 bg-surface border border-border rounded-lg">
-        <h3 className="font-medium text-sm mb-3">Add Setting</h3>
+        <h3 className="font-medium text-sm mb-3">{t('admin.addSetting')}</h3>
         <div className="flex flex-wrap gap-2">
-          <input value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="Key" className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
-          <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Value (JSON)" className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
-          <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Description" className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
-          <button onClick={handleAdd} className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">Add</button>
+          <input value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t('admin.settingKey') || 'Key'} className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
+          <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t('admin.settingValue') || 'Value (JSON)'} className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
+          <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder={t('admin.settingDesc') || 'Description'} className="flex-1 min-w-[120px] px-3 py-1.5 bg-bg border border-border rounded text-sm" />
+          <button onClick={handleAdd} className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">{t('common.add') || 'Add'}</button>
         </div>
       </div>
 
@@ -323,7 +327,7 @@ function SettingsPanel() {
           </div>
         ))}
         {settings.length === 0 && (
-          <p className="text-center text-text-secondary py-8 text-sm">No settings configured yet</p>
+          <p className="text-center text-text-secondary py-8 text-sm">{t('admin.noSettings')}</p>
         )}
       </div>
     </div>
@@ -331,6 +335,7 @@ function SettingsPanel() {
 }
 
 function AuditLogs() {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -353,10 +358,10 @@ function AuditLogs() {
         <input
           value={actionFilter}
           onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
-          placeholder="Filter by action..."
+          placeholder={t('admin.filterAction') || 'Filter by action...'}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-sm focus:outline-none"
         />
-        <span className="text-sm text-text-secondary">{total} entries</span>
+        <span className="text-sm text-text-secondary">{total} {t('admin.auditLogs')}</span>
       </div>
 
       <div className="space-y-1">
@@ -375,16 +380,16 @@ function AuditLogs() {
           </div>
         ))}
         {logs.length === 0 && (
-          <p className="text-center text-text-secondary py-8 text-sm">No audit logs found</p>
+          <p className="text-center text-text-secondary py-8 text-sm">{t('admin.noLogs')}</p>
         )}
       </div>
 
       {total > limit && (
         <div className="flex items-center justify-between mt-4">
-          <span className="text-sm text-text-secondary">Page {page} of {Math.ceil(total / limit)}</span>
+          <span className="text-sm text-text-secondary">{t('admin.pageOf', { page, totalPages: Math.ceil(total / limit) })}</span>
           <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">Previous</button>
-            <button disabled={page >= Math.ceil(total / limit)} onClick={() => setPage((p) => p + 1)} className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">Next</button>
+            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">{t('admin.previous')}</button>
+            <button disabled={page >= Math.ceil(total / limit)} onClick={() => setPage((p) => p + 1)} className="px-3 py-1 text-sm border border-border rounded-lg disabled:opacity-40 hover:bg-surface">{t('admin.next')}</button>
           </div>
         </div>
       )}

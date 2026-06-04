@@ -18,9 +18,9 @@ export default function SettingsPage() {
     try {
       await userApi.updateProfile({ nickname, bio });
       updateUser({ nickname, bio });
-      setMsg('Saved successfully');
+      setMsg(t('common.saved') || 'Saved successfully');
     } catch (err: any) {
-      setMsg(err.response?.data?.message || 'Save failed');
+      setMsg(err.response?.data?.message || t('agent.error'));
     } finally {
       setSaving(false);
       setTimeout(() => setMsg(''), 3000);
@@ -142,19 +142,19 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium">{t('settings.title')}</p>
-            <p className="text-sm text-text-secondary">Choose default reasoning mode</p>
+            <p className="text-sm text-text-secondary">{t('settings.defaultMode') || 'Choose default reasoning mode'}</p>
           </div>
           <select className="input-field w-40">
-            <option value="react">ReAct</option>
-            <option value="planner">Plan-and-Execute</option>
-            <option value="reasoner">Reasoner</option>
+            <option value="react">{t('agent.modeReact')}</option>
+            <option value="planner">{t('agent.modePlanner')}</option>
+            <option value="reasoner">{t('agent.modeReasoner')}</option>
           </select>
         </div>
       </div>
 
       {/* Account */}
       <div className="card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Account</h2>
+        <h2 className="text-lg font-semibold">{t('profile.title')}</h2>
         <button
           onClick={() => logout()}
           className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"

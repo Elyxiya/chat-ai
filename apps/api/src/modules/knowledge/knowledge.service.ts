@@ -30,7 +30,7 @@ export class KnowledgeService {
       data: {
         name: dto.name,
         description: dto.description,
-        ownerId: userId,
+        owner: { connect: { id: userId } },
         isPublic: dto.isPublic ?? false,
         chunkSize: dto.chunkSize ?? 500,
         chunkOverlap: dto.chunkOverlap ?? 50,

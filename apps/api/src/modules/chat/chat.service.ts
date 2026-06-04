@@ -3,6 +3,7 @@ import { PrismaService } from '../../config/prisma.service';
 import { RedisService } from '../common/redis.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/dto/notification.dto';
+import { ChatGateway } from '../../gateways/chat.gateway';
 import {
   CreateSessionDto,
   SendMessageDto,
@@ -18,6 +19,7 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly notificationService: NotificationService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   async getUserSessions(userId: string) {
@@ -118,7 +120,7 @@ export class ChatService {
         sessionType: dto.sessionType,
         name: dto.name,
         description: dto.description,
-        ownerId: userId,
+        owner: { connect: { id: userId } },
         isPublic: dto.isPublic ?? false,
         members: {
           create: [
@@ -549,7 +551,33 @@ export class ChatService {
       },
     });
 
-    return friendships.map((f: { userId: string; friendId: string; friend: any; user: any }) => (f.userId === userId ? f.friend : f.user));
+    // Deduplicate by user id — bidirectional records can return the same friend twice
+    const seen = new Set<string>();
+    return friendships.reduce((acc: any[], f: { userId: string; friendId: string; friend: any; user: any }) => {
+      const friend = f.userId === userId ? f.friend : f.user;
+      if (!seen.has(friend.id)) {
+        seen.add(friend.id);
+        acc.push(friend);
+      }
+      return acc;
+    }, []);
+  }
+
+  async removeFriend(userId: string, friendId: string) {
+    // Delete both directional friendship records
+    await this.prisma.friendship.deleteMany({
+      where: {
+        OR: [
+          { userId, friendId },
+          { userId: friendId, friendId: userId },
+        ],
+        status: 'accepted',
+      },
+    });
+
+    // Notify both users that the friendship was removed
+    this.chatGateway.emitToUser(userId, 'friendship_updated', { friendId, status: 'removed' });
+    this.chatGateway.emitToUser(friendId, 'friendship_updated', { friendId: userId, status: 'removed' });
   }
 
   private async sendFriendRequestNotification(userId: string, friendId: string) {
@@ -576,6 +604,23 @@ export class ChatService {
       await this.notificationService.createFriendRequest(userId, friendId, requesterName);
     } catch (err) {
       this.logger.error(`Failed to send friend request notification from ${userId} to ${friendId}: ${err.message}`);
+    }
+  }
+
+  private async sendFriendAcceptedNotification(acceptorId: string, requesterId: string) {
+    const acceptor = await this.prisma.user.findUnique({ where: { id: acceptorId } });
+    if (!acceptor) return;
+    const acceptorName = acceptor.nickname || acceptor.username || 'Someone';
+    try {
+      await this.notificationService.create({
+        userId: requesterId,
+        type: NotificationType.FRIEND_ACCEPTED,
+        title: '好友请求已通过',
+        content: `${acceptorName} 接受了你的好友请求`,
+        data: { userId: acceptorId },
+      });
+    } catch (err) {
+      this.logger.error(`Failed to send friend accepted notification: ${err.message}`);
     }
   }
 
@@ -618,9 +663,18 @@ export class ChatService {
           data: { status: 'accepted' },
         });
 
-        return this.prisma.friendship.create({
+        const friendship = await this.prisma.friendship.create({
           data: { userId, friendId, status: 'accepted' },
         });
+
+        // Notify the original requester that their request was accepted
+        await this.sendFriendAcceptedNotification(userId, friendId);
+
+        // Emit WebSocket event to both users so they can refresh their friend list
+        this.chatGateway.emitToUser(userId, 'friendship_updated', { friendId: friendId, status: 'accepted' });
+        this.chatGateway.emitToUser(friendId, 'friendship_updated', { friendId: userId, status: 'accepted' });
+
+        return friendship;
       }
 
       case 'reject':
@@ -1383,7 +1437,7 @@ export class ChatService {
         name: dto.name,
         description: dto.description,
         isPublic: dto.isPublic ?? false,
-        ownerId: userId,
+        owner: { connect: { id: userId } },
         whoCanPost: 'admin',
         members: {
           create: { userId, role: 'owner' },
@@ -1434,7 +1488,7 @@ export class ChatService {
   async subscribeChannel(userId: string, channelId: string) {
     const session = await this.prisma.chatSession.findUnique({
       where: { id: channelId },
-      select: { sessionType: true, maxMembers: true, _count: { select: { members: true } } },
+      select: { sessionType: true, maxMembers: true, joinApproval: true, _count: { select: { members: true } } },
     });
     if (!session || session.sessionType !== 'channel') throw new NotFoundException('Channel not found');
     if (session._count.members >= session.maxMembers) throw new ForbiddenException('Channel is full');
@@ -1443,6 +1497,34 @@ export class ChatService {
       where: { sessionId_userId: { sessionId: channelId, userId } },
     });
     if (existing) return { subscribed: true, alreadyMember: true };
+
+    // Check join approval mode
+    if (session.joinApproval === 'invite_only') {
+      throw new ForbiddenException('This channel is invite-only');
+    }
+    if (session.joinApproval === 'approval') {
+      // Check if there's already a pending application
+      const existingApp = await this.prisma.channelJoinApplication.findUnique({
+        where: { channelId_userId: { channelId, userId } },
+      });
+      if (existingApp?.status === 'pending') {
+        throw new ForbiddenException('A join request is already pending');
+      }
+      if (existingApp?.status === 'approved') {
+        // Was previously approved but somehow not a member — re-add
+        await this.prisma.chatSessionMember.create({
+          data: { sessionId: channelId, userId, role: 'member' },
+        });
+        return { subscribed: true, alreadyMember: false };
+      }
+
+      // Create join application and notify admins
+      await this.prisma.channelJoinApplication.create({
+        data: { channelId, userId, status: 'pending' },
+      });
+      await this.notifyChannelAdmins(channelId, userId);
+      return { subscribed: false, requiresApproval: true };
+    }
 
     await this.prisma.chatSessionMember.create({
       data: { sessionId: channelId, userId, role: 'member' },
@@ -1499,5 +1581,424 @@ export class ChatService {
     if (!member) return false;
     if (member.session.whoCanPost === 'anyone') return true;
     return member.role === 'owner' || member.role === 'admin';
+  }
+
+  // ======== Channel Discovery ========
+
+  async discoverChannels(
+    userId: string,
+    query?: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    // Get channels the user already subscribed to, to exclude them
+    const subscribedIds = await this.prisma.chatSessionMember.findMany({
+      where: { userId },
+      select: { sessionId: true },
+    });
+    const excludeIds = subscribedIds.map((m) => m.sessionId);
+
+    const where: any = {
+      sessionType: 'channel',
+      isPublic: true,
+      id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined,
+    };
+
+    if (query) {
+      where.OR = [
+        { name: { contains: query, mode: 'insensitive' } },
+        { description: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+
+    let channels: any[];
+    let total: number;
+    try {
+      [channels, total] = await Promise.all([
+        this.prisma.chatSession.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            avatarUrl: true,
+            joinApproval: true,
+            createdAt: true,
+            owner: { select: { id: true, username: true, avatarUrl: true } },
+            _count: { select: { members: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.chatSession.count({ where }),
+      ]);
+    } catch (err: any) {
+      this.logger.error(`discoverChannels failed for user ${userId}: ${err.message}`, err.stack);
+      throw err;
+    }
+
+    return { items: channels, total, page, limit };
+  }
+
+  // ======== Channel Invitation ========
+
+  async inviteToChannel(inviterId: string, channelId: string, targetUserId: string) {
+    // Verify channel exists and inviter has permission
+    const channel = await this.prisma.chatSession.findUnique({
+      where: { id: channelId },
+      select: { id: true, name: true, sessionType: true, ownerId: true },
+    });
+    if (!channel || channel.sessionType !== 'channel') throw new NotFoundException('Channel not found');
+
+    const inviter = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: inviterId } },
+    });
+    if (!inviter || (inviter.role !== 'owner' && inviter.role !== 'admin')) {
+      throw new ForbiddenException('Only channel admins can invite members');
+    }
+
+    // Cannot invite yourself
+    if (inviterId === targetUserId) throw new ForbiddenException('Cannot invite yourself');
+
+    // Check if target exists
+    const targetUser = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) throw new NotFoundException('User not found');
+
+    // Check if already a member
+    const existingMember = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: targetUserId } },
+    });
+    if (existingMember) throw new ForbiddenException('User is already a member');
+
+    // Check for existing pending invitation
+    const existingInvite = await this.prisma.channelInvitation.findUnique({
+      where: { channelId_inviteeId: { channelId, inviteeId: targetUserId } },
+    });
+    if (existingInvite && existingInvite.status === 'pending') {
+      throw new ForbiddenException('An invitation has already been sent to this user');
+    }
+    if (existingInvite) {
+      // Update existing (re-accepted or re-pended)
+      await this.prisma.channelInvitation.update({
+        where: { id: existingInvite.id },
+        data: { status: 'pending', inviterId },
+      });
+      // Send notification
+      await this.sendChannelInviteNotification(inviterId, targetUserId, channelId, channel.name || 'Unnamed', existingInvite.id);
+      return { invited: true };
+    }
+
+    // Create invitation
+    const invitation = await this.prisma.channelInvitation.create({
+      data: {
+        channelId,
+        inviterId,
+        inviteeId: targetUserId,
+        status: 'pending',
+      },
+    });
+
+    // Send notification
+    await this.sendChannelInviteNotification(inviterId, targetUserId, channelId, channel.name || 'Unnamed', invitation.id);
+
+    return { invited: true };
+  }
+
+  private async sendChannelInviteNotification(inviterId: string, inviteeId: string, channelId: string, channelName: string, invitationId: string) {
+    const inviter = await this.prisma.user.findUnique({ where: { id: inviterId } });
+    const inviterName = inviter?.nickname || inviter?.username || 'Someone';
+
+    try {
+      await this.notificationService.create({
+        userId: inviteeId,
+        type: NotificationType.CHANNEL_INVITATION,
+        title: '频道邀请',
+        content: `${inviterName} 邀请你加入频道: ${channelName}`,
+        data: { channelId, inviterId, inviterName, invitationId },
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to send channel invite notification: ${err.message}`);
+    }
+  }
+
+  async getChannelInvitations(userId: string) {
+    const invitations = await this.prisma.channelInvitation.findMany({
+      where: { inviteeId: userId, status: 'pending' },
+      include: {
+        channel: {
+          select: { id: true, name: true, description: true, avatarUrl: true },
+        },
+        inviter: {
+          select: { id: true, username: true, nickname: true, avatarUrl: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return invitations;
+  }
+
+  async acceptChannelInvitation(userId: string, invitationId: string) {
+    const invitation = await this.prisma.channelInvitation.findUnique({
+      where: { id: invitationId },
+    });
+
+    if (!invitation || invitation.inviteeId !== userId) {
+      throw new NotFoundException('Invitation not found');
+    }
+    if (invitation.status !== 'pending') {
+      throw new ForbiddenException('Invitation is no longer pending');
+    }
+
+    // Add user as member
+    await this.prisma.chatSessionMember.create({
+      data: { sessionId: invitation.channelId, userId, role: 'member' },
+    });
+
+    // Mark invitation as accepted
+    await this.prisma.channelInvitation.update({
+      where: { id: invitationId },
+      data: { status: 'accepted' },
+    });
+
+    // System message
+    await this.prisma.message.create({
+      data: {
+        sessionId: invitation.channelId,
+        content: 'joined the channel via invitation',
+        contentType: 'system',
+        metadata: { userId, invitedBy: invitation.inviterId },
+      },
+    });
+
+    return { accepted: true, channelId: invitation.channelId };
+  }
+
+  async rejectChannelInvitation(userId: string, invitationId: string) {
+    const invitation = await this.prisma.channelInvitation.findUnique({
+      where: { id: invitationId },
+    });
+
+    if (!invitation || invitation.inviteeId !== userId) {
+      throw new NotFoundException('Invitation not found');
+    }
+    if (invitation.status !== 'pending') {
+      throw new ForbiddenException('Invitation is no longer pending');
+    }
+
+    await this.prisma.channelInvitation.update({
+      where: { id: invitationId },
+      data: { status: 'rejected' },
+    });
+
+    return { rejected: true };
+  }
+
+  // ======== Join Approval (Phase 2) ========
+
+  private async notifyChannelAdmins(channelId: string, applicantUserId: string) {
+    const channel = await this.prisma.chatSession.findUnique({
+      where: { id: channelId },
+      select: { name: true },
+    });
+    const applicant = await this.prisma.user.findUnique({
+      where: { id: applicantUserId },
+      select: { nickname: true, username: true },
+    });
+    if (!channel || !applicant) return;
+
+    const applicantName = applicant.nickname || applicant.username || 'Someone';
+
+    // Find all admins and owner
+    const admins = await this.prisma.chatSessionMember.findMany({
+      where: {
+        sessionId: channelId,
+        OR: [{ role: 'owner' }, { role: 'admin' }],
+      },
+      select: { userId: true },
+    });
+
+    for (const admin of admins) {
+      try {
+        await this.notificationService.create({
+          userId: admin.userId,
+          type: NotificationType.JOIN_REQUEST,
+          title: '加入频道申请',
+          content: `${applicantName} 申请加入频道: ${channel.name || 'Unnamed'}`,
+          data: { channelId, applicantId: applicantUserId, applicantName },
+        });
+      } catch (err: any) {
+        this.logger.error(`Failed to send join request notification: ${err.message}`);
+      }
+    }
+  }
+
+  async applyToJoinChannel(userId: string, channelId: string, reason?: string) {
+    const session = await this.prisma.chatSession.findUnique({
+      where: { id: channelId },
+      select: { sessionType: true, joinApproval: true, maxMembers: true, _count: { select: { members: true } } },
+    });
+    if (!session || session.sessionType !== 'channel') throw new NotFoundException('Channel not found');
+    if (session.joinApproval !== 'approval') throw new ForbiddenException('This channel does not require approval');
+
+    // Check if already a member
+    const existing = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (existing) return { alreadyMember: true };
+
+    if (session._count.members >= session.maxMembers) throw new ForbiddenException('Channel is full');
+
+    // Check existing application
+    const existingApp = await this.prisma.channelJoinApplication.findUnique({
+      where: { channelId_userId: { channelId, userId } },
+    });
+    if (existingApp?.status === 'approved') {
+      // Already approved — add as member
+      await this.prisma.chatSessionMember.create({
+        data: { sessionId: channelId, userId, role: 'member' },
+      });
+      return { applied: true, alreadyMember: false };
+    }
+    if (existingApp?.status === 'pending') {
+      throw new ForbiddenException('A join request is already pending');
+    }
+
+    // Create or update application
+    if (existingApp) {
+      await this.prisma.channelJoinApplication.update({
+        where: { id: existingApp.id },
+        data: { status: 'pending', reason: reason || null },
+      });
+    } else {
+      await this.prisma.channelJoinApplication.create({
+        data: { channelId, userId, reason: reason || null, status: 'pending' },
+      });
+    }
+
+    // Notify admins
+    await this.notifyChannelAdmins(channelId, userId);
+
+    return { applied: true, requiresApproval: true };
+  }
+
+  async getPendingApplications(adminId: string, channelId: string) {
+    // Verify admin permission
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: adminId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only channel admins can view applications');
+    }
+
+    const applications = await this.prisma.channelJoinApplication.findMany({
+      where: { channelId, status: 'pending' },
+      include: {
+        user: { select: { id: true, username: true, nickname: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return applications;
+  }
+
+  async approveJoinApplication(adminId: string, channelId: string, applicantUserId: string) {
+    // Verify admin permission
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: adminId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only channel admins can approve applications');
+    }
+
+    // Find application
+    const app = await this.prisma.channelJoinApplication.findUnique({
+      where: { channelId_userId: { channelId, userId: applicantUserId } },
+    });
+    if (!app || app.status !== 'pending') throw new NotFoundException('Pending application not found');
+
+    // Add as member
+    const existingMember = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: applicantUserId } },
+    });
+    if (!existingMember) {
+      await this.prisma.chatSessionMember.create({
+        data: { sessionId: channelId, userId: applicantUserId, role: 'member' },
+      });
+    }
+
+    // Mark application as approved
+    await this.prisma.channelJoinApplication.update({
+      where: { id: app.id },
+      data: { status: 'approved' },
+    });
+
+    // System message
+    await this.prisma.message.create({
+      data: {
+        sessionId: channelId,
+        content: 'joined the channel (request approved)',
+        contentType: 'system',
+        metadata: { userId: applicantUserId, approvedBy: adminId },
+      },
+    });
+
+    // Notify applicant
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+    const channel = await this.prisma.chatSession.findUnique({ where: { id: channelId }, select: { name: true } });
+    try {
+      await this.notificationService.create({
+        userId: applicantUserId,
+        type: NotificationType.JOIN_APPROVED,
+        title: '加入申请已通过',
+        content: `你的加入频道 "${channel?.name || 'Unnamed'}" 的申请已通过`,
+        data: { channelId, approvedBy: adminId },
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to send approval notification: ${err.message}`);
+    }
+
+    return { approved: true };
+  }
+
+  async rejectJoinApplication(adminId: string, channelId: string, applicantUserId: string) {
+    // Verify admin permission
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId: adminId } },
+    });
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ForbiddenException('Only channel admins can reject applications');
+    }
+
+    const app = await this.prisma.channelJoinApplication.findUnique({
+      where: { channelId_userId: { channelId, userId: applicantUserId } },
+    });
+    if (!app || app.status !== 'pending') throw new NotFoundException('Pending application not found');
+
+    await this.prisma.channelJoinApplication.update({
+      where: { id: app.id },
+      data: { status: 'rejected' },
+    });
+
+    return { rejected: true };
+  }
+
+  async updateChannelJoinApproval(userId: string, channelId: string, mode: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId: channelId, userId } },
+    });
+    if (!member || member.role !== 'owner') throw new ForbiddenException('Only channel owner can change approval settings');
+
+    if (!['none', 'approval', 'invite_only'].includes(mode)) {
+      throw new ForbiddenException('Invalid approval mode. Must be: none, approval, or invite_only');
+    }
+
+    await this.prisma.chatSession.update({
+      where: { id: channelId },
+      data: { joinApproval: mode },
+    });
+
+    return { joinApproval: mode };
   }
 }
