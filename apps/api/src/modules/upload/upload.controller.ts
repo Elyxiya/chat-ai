@@ -16,15 +16,20 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { UploadFileDto } from './dto/upload.dto';
 
+@ApiTags('Upload')
+@ApiBearerAuth()
 @Controller({ path: 'upload', version: '1' })
 @UseGuards(AuthGuard('jwt'))
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('file')
+  @ApiOperation({ summary: '上传文件（最大 50MB，multipart/form-data）' })
+  @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 50 * 1024 * 1024 },
@@ -42,6 +47,8 @@ export class UploadController {
   }
 
   @Post('image')
+  @ApiOperation({ summary: '上传图片（最大 10MB，自动生成缩略图）' })
+  @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 10 * 1024 * 1024 },
@@ -65,6 +72,7 @@ export class UploadController {
   }
 
   @Get('files')
+  @ApiOperation({ summary: '获取当前用户的上传文件列表（分页）' })
   async listFiles(
     @Req() req: any,
     @Query('page') page?: string,
@@ -78,6 +86,7 @@ export class UploadController {
   }
 
   @Get('files/:id')
+  @ApiOperation({ summary: '获取文件详情' })
   async getFileInfo(
     @Req() req: any,
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,6 +95,7 @@ export class UploadController {
   }
 
   @Get('files/:id/download')
+  @ApiOperation({ summary: '下载文件流' })
   async downloadFile(
     @Req() req: any,
     @Param('id', ParseUUIDPipe) id: string,
@@ -98,6 +108,7 @@ export class UploadController {
   }
 
   @Delete('files/:id')
+  @ApiOperation({ summary: '删除已上传的文件' })
   async deleteFile(
     @Req() req: any,
     @Param('id', ParseUUIDPipe) id: string,
