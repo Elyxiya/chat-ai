@@ -104,6 +104,15 @@ export default function ChannelSettingsPage() {
     } catch { /* ignore */ }
   };
 
+  const handleDeleteChannel = async () => {
+    if (!sessionId) return;
+    if (!window.confirm('确定要删除这个频道吗？此操作不可撤销。')) return;
+    try {
+      await chatApi.deleteChannel(sessionId);
+      navigate('/chat');
+    } catch { /* ignore */ }
+  };
+
   const handleApprove = async (userId: string) => {
     if (!sessionId) return;
     setProcessing((prev) => new Set(prev).add(`approve-${userId}`));
@@ -198,6 +207,18 @@ export default function ChannelSettingsPage() {
                   </div>
                 </label>
               ))}
+            </div>
+
+            {/* 删除频道 */}
+            <div className="mt-8 pt-6 border-t border-border">
+              <h3 className="text-sm font-semibold mb-2 text-red-600">危险操作</h3>
+              <p className="text-xs text-text-secondary mb-3">删除频道后所有消息将被清除，此操作不可撤销。</p>
+              <button
+                onClick={handleDeleteChannel}
+                className="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                删除频道
+              </button>
             </div>
           </div>
         ) : activeTab === 'applications' && isAdmin ? (
