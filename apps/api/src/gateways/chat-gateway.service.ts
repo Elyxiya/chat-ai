@@ -106,13 +106,26 @@ export class ChatGatewayService {
       }
     }
 
+    // Assign monotonically increasing sequence number per session
+    let seq = Date.now(); // fallback if Redis fails
+    try {
+      seq = await this.redis.incr(`seq:${sessionId}`);
+    } catch (err: any) {
+      this.logger.warn(`[SEQ] Redis INCR failed for session ${sessionId}, using timestamp fallback: ${err.message}`);
+    }
+
+    const metadata = {
+      ...(dto.metadata || {}),
+      seq,
+    };
+
     return this.prisma.message.create({
       data: {
         sessionId,
         senderId: userId,
         content: dto.content || '',
         contentType: dto.contentType || 'text',
-        metadata: dto.metadata || {},
+        metadata,
       },
       include: {
         sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },

@@ -155,7 +155,8 @@ export class ChatGateway
 
         // ACK to sender only — confirms the message was persisted
         if (clientMsgId) {
-          client.emit('message_ack', { clientMsgId, serverMsgId: message.id });
+          const seq = (message.metadata as any)?.seq;
+          client.emit('message_ack', { clientMsgId, serverMsgId: message.id, seq });
         }
 
         this.server.to(`session:${sessionId}`).emit('message', message);

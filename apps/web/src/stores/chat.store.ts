@@ -9,6 +9,19 @@ import { useAuthStore } from './auth.store';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
 const MAX_VISIBLE_MESSAGES = 500;
 
+/** Binary search to find the index to insert a message by seq order. */
+function findInsertIndex(messages: ChatMessage[], seq: number): number {
+  let lo = 0;
+  let hi = messages.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    const midSeq = (messages[mid] as any)?.metadata?.seq;
+    if (midSeq == null) { lo = mid + 1; continue; }
+    if (midSeq < seq) { lo = mid + 1; } else { hi = mid; }
+  }
+  return lo;
+}
+
 interface ChatState {
   sessions: ChatSession[];
   activeSessionId: string | null;
@@ -152,19 +165,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
     };
 
-    socket.on('message_ack', ({ clientMsgId, serverMsgId }: { clientMsgId: string; serverMsgId: string }) => {
+    socket.on('message_ack', ({ clientMsgId, serverMsgId, seq }: { clientMsgId: string; serverMsgId: string; seq?: number }) => {
       const entry = _pendingAcks.get(clientMsgId);
       if (!entry) return;
       if (entry.timer) clearTimeout(entry.timer);
       _pendingAcks.delete(clientMsgId);
 
-      // Replace temp ID with server ID and mark as sent
+      // Replace temp ID with server ID, set seq and mark as sent
       set((state) => {
         const newMessages = { ...state.messages };
         for (const sid of Object.keys(newMessages)) {
           newMessages[sid] = newMessages[sid].map((m) =>
             (m as any).clientMsgId === clientMsgId
-              ? { ...m, id: serverMsgId, status: 'sent' as const }
+              ? { ...m, id: serverMsgId, status: 'sent' as const, metadata: { ...m.metadata, seq } }
               : m,
           );
         }
@@ -195,14 +208,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const msgClientId = (msg as any).metadata?.clientMsgId as string | undefined;
         const filtered = sessionMsgs.filter(
           (m) =>
-            // Remove optimistic temp messages from the same sender
             !(m.id.startsWith('temp-') && m.senderId === msg.senderId) &&
-            // Dedup by clientMsgId (ACK may have already updated the message)
             !(msgClientId && (m as any).clientMsgId === msgClientId),
         );
-        newMessages[msg.sessionId] = filtered.length >= MAX_VISIBLE_MESSAGES
-          ? [...filtered.slice(filtered.length - MAX_VISIBLE_MESSAGES + 1), msg]
-          : [...filtered, msg];
+
+        // Insert in seq order (fallback to createdAt for messages without seq)
+        const msgSeq = (msg as any).metadata?.seq;
+        const insertIdx = msgSeq
+          ? findInsertIndex(filtered, msgSeq)
+          : filtered.length;
+        const withMsg = [
+          ...filtered.slice(0, insertIdx),
+          msg,
+          ...filtered.slice(insertIdx),
+        ];
+
+        newMessages[msg.sessionId] = withMsg.length > MAX_VISIBLE_MESSAGES
+          ? withMsg.slice(withMsg.length - MAX_VISIBLE_MESSAGES)
+          : withMsg;
         msgCountPerSession.set(
           msg.sessionId,
           (msgCountPerSession.get(msg.sessionId) || 0) + 1,
