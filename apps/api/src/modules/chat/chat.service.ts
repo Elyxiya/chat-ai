@@ -293,11 +293,6 @@ export class ChatService {
       },
     });
 
-    await this.prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { updatedAt: new Date() },
-    });
-
     // Create mentions from explicit mention list
     if (dto.mentions?.length) {
       await this.prisma.messageMention.createMany({
@@ -382,12 +377,6 @@ export class ChatService {
       ),
     );
 
-    // Update session timestamps
-    await this.prisma.chatSession.updateMany({
-      where: { id: { in: validSessionIds } },
-      data: { updatedAt: new Date() },
-    });
-
     return forwardedMessages;
   }
 
@@ -448,11 +437,6 @@ export class ChatService {
         }),
       ),
     );
-
-    await this.prisma.chatSession.update({
-      where: { id: targetSessionId },
-      data: { updatedAt: new Date() },
-    });
 
     return { forwarded: forwarded.length, total: messageIds.length };
   }
