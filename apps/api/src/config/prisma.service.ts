@@ -1,12 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { INestApplication, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { INestApplication, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 
 export const PRISMA_CLIENT = 'PRISMA_CLIENT';
 
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   async onModuleInit() {
     await this.$connect();
-    console.log('PostgreSQL connected successfully');
+    this.logger.log('PostgreSQL connected successfully');
   }
 
   async onModuleDestroy() {
