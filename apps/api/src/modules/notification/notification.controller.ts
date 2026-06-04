@@ -27,6 +27,15 @@ export class NotificationController {
     return success({ count: await this.notificationService.findUnread(userId) });
   }
 
+  @Get('unread-since')
+  @ApiOperation({ summary: '拉取指定时间之后的未读通知（用于上线时离线同步）' })
+  async findUnreadSince(
+    @CurrentUser('id') userId: string,
+    @Query('since') since: string,
+  ) {
+    return success(await this.notificationService.findUnreadSince(userId, since));
+  }
+
   @Post(':id/read')
   @ApiOperation({ summary: 'Mark notification as read' })
   async markAsRead(

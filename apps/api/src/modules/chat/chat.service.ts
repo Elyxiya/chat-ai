@@ -312,24 +312,36 @@ export class ChatService {
         })),
       });
 
-      // Create notifications for @all
-      const sender = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { username: true, nickname: true },
-      });
-      const senderName = sender?.nickname || sender?.username || 'Someone';
+      // Create notifications for @all — batch write, individual push
+      if (atAllTargets.length > 0) {
+        const sender = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { username: true, nickname: true },
+        });
+        const senderName = sender?.nickname || sender?.username || 'Someone';
 
-      for (const targetId of atAllTargets) {
+        const notifications = atAllTargets.map((targetId) => ({
+          userId: targetId,
+          type: NotificationType.MENTION,
+          title: `@all from ${senderName}`,
+          content: dto.content.slice(0, 100),
+          data: { messageId: message.id, sessionId, mentionedBy: userId, type: 'all' } as any,
+        }));
+
+        // Batch DB write
         try {
-          await this.notificationService.create({
-            userId: targetId,
-            type: NotificationType.MENTION,
-            title: `@all from ${senderName}`,
-            content: dto.content.slice(0, 100),
-            data: { messageId: message.id, sessionId, mentionedBy: userId, type: 'all' },
-          });
+          await this.prisma.notification.createMany({ data: notifications });
         } catch (err: any) {
-          this.logger.error(`Failed to send @all notification to ${targetId}: ${err.message}`);
+          this.logger.error(`Failed to batch create @all notifications: ${err.message}`);
+        }
+
+        // Individual WebSocket push (can't batch — need per-user emit)
+        for (const n of notifications) {
+          try {
+            this.chatGateway.emitToUser(n.userId, 'notification', n);
+          } catch (err: any) {
+            this.logger.error(`Failed to push @all notification to ${n.userId}: ${err.message}`);
+          }
         }
       }
     }

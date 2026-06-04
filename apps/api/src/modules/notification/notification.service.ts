@@ -78,7 +78,24 @@ export class NotificationService {
 
   async findUnread(userId: string) {
     return this.prisma.notification.count({
-      where: { userId, isRead: false },
+      where: { userId, readAt: null },
+    });
+  }
+
+  /** 拉取指定时间之后的未读通知（用于上线时同步离线期间的@all等） */
+  async findUnreadSince(userId: string, since: string) {
+    const sinceDate = new Date(since);
+    if (isNaN(sinceDate.getTime())) {
+      return this.findAll(userId, 50);
+    }
+    return this.prisma.notification.findMany({
+      where: {
+        userId,
+        readAt: null,
+        createdAt: { gt: sinceDate },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
     });
   }
 
@@ -91,14 +108,14 @@ export class NotificationService {
 
     return this.prisma.notification.update({
       where: { id: notificationId },
-      data: { isRead: true },
+      data: { isRead: true, readAt: new Date() },
     });
   }
 
   async markAllAsRead(userId: string) {
     return this.prisma.notification.updateMany({
-      where: { userId, isRead: false },
-      data: { isRead: true },
+      where: { userId, readAt: null },
+      data: { isRead: true, readAt: new Date() },
     });
   }
 
