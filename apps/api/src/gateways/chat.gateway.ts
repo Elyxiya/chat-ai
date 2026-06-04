@@ -12,6 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { ChatGatewayService } from './chat-gateway.service';
 import { MetricsService } from '../modules/common/metrics.service';
+import { RedisService } from '../modules/common/redis.service';
 
 export enum WsMessageType {
   LOGIN = 0,
@@ -54,6 +55,7 @@ export class ChatGateway
   constructor(
     private readonly chatGatewayService: ChatGatewayService,
     private readonly metrics: MetricsService,
+    private readonly redis: RedisService,
   ) {}
 
   afterInit() {
@@ -125,6 +127,31 @@ export class ChatGateway
     client.emit('pong', { timestamp: Date.now() });
   }
 
+  /** Per-user: 5 msg/s, per-session: 20 msg/s. Returns true if allowed. */
+  private async checkRateLimit(userId: string, sessionId?: string): Promise<boolean> {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+
+      // Per-user limit
+      const userKey = `rate:user:${userId}:${now}`;
+      const userCount = await this.redis.incr(userKey);
+      if (userCount === 1) await this.redis.expire(userKey, 2);
+      if (userCount > 5) return false;
+
+      // Per-session limit
+      if (sessionId) {
+        const sessionKey = `rate:sess:${sessionId}:${now}`;
+        const sessionCount = await this.redis.incr(sessionKey);
+        if (sessionCount === 1) await this.redis.expire(sessionKey, 2);
+        if (sessionCount > 20) return false;
+      }
+
+      return true;
+    } catch {
+      return true; // rate limiter failure — allow through
+    }
+  }
+
   @SubscribeMessage('message')
   async handleMessage(
     @MessageBody() payload: WsIncomingMessage,
@@ -135,6 +162,17 @@ export class ChatGateway
 
     const start = Date.now();
     const typeName = WsMessageType[payload.type] || 'UNKNOWN';
+
+    // Rate limit TEXT/IMAGE/FILE/AUDIO/VIDEO messages only
+    if (payload.type >= WsMessageType.TEXT && payload.type <= WsMessageType.VIDEO) {
+      const sessionId = payload.data?.sessionId;
+      const allowed = await this.checkRateLimit(user.id, sessionId);
+      if (!allowed) {
+        client.emit('error', { message: '发送过快，请稍后再试', code: 'RATE_LIMITED' });
+        this.metrics.incrementCounter('ws_rate_limited_total', { type: typeName });
+        return;
+      }
+    }
 
     switch (payload.type) {
       case WsMessageType.TEXT:

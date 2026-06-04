@@ -70,7 +70,14 @@ describe('ChatGateway', () => {
       recordDuration: jest.fn(),
       export: jest.fn().mockReturnValue(''),
     };
-    gateway = new ChatGateway(mockGatewayService as any, mockMetricsService as any);
+    const mockRedisService = {
+      incr: jest.fn().mockResolvedValue(1),
+      expire: jest.fn().mockResolvedValue(true),
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+    };
+    gateway = new ChatGateway(mockGatewayService as any, mockMetricsService as any, mockRedisService as any);
     const { server } = createMockServer();
     gateway.server = server;
 
