@@ -4,6 +4,7 @@ import { ChatService } from './chat.service';
 import { RedisService } from '../common/redis.service';
 import { PrismaService } from '../../config/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { ChatGateway } from '../../gateways/chat.gateway';
 import { makeSession, makeMessage, makeSessionMember, makeUser, makeFriendship } from '../../test/factories/entities.factory';
 
 describe('ChatService', () => {
@@ -88,12 +89,19 @@ describe('ChatService', () => {
       createFriendRequest: jest.fn().mockResolvedValue({ id: 'notif-1' }),
     };
 
+    const mockChatGateway = {
+      emitToUser: jest.fn(),
+      emitToSession: jest.fn(),
+      server: { to: jest.fn().mockReturnThis(), emit: jest.fn() },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RedisService, useValue: mockRedis },
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: ChatGateway, useValue: mockChatGateway },
       ],
     }).compile();
 

@@ -75,7 +75,7 @@ describe('KnowledgeService', () => {
       expect(mockPrisma.knowledgeBase.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           name: 'New KB',
-          ownerId: 'user-1',
+          owner: { connect: { id: 'user-1' } },
           chunkSize: 500,
           chunkOverlap: 50,
         }),

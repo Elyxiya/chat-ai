@@ -34,6 +34,8 @@ describe('ChatGatewayService', () => {
     mockRedis = {
       set: jest.fn(),
       del: jest.fn(),
+      incr: jest.fn().mockResolvedValue(1),
+      expire: jest.fn().mockResolvedValue(true),
     };
 
     mockJwtService = {
@@ -192,7 +194,7 @@ describe('ChatGatewayService', () => {
         data: {
           sessionType: 'agent',
           name: 'AI Assistant',
-          ownerId: 'user-1',
+          owner: { connect: { id: 'user-1' } },
           members: {
             create: { userId: 'user-1', role: 'owner' },
           },
@@ -208,7 +210,7 @@ describe('ChatGatewayService', () => {
         sessionId: 'session-1',
         content: 'Hello',
         contentType: 'text',
-        metadata: {},
+        metadata: { seq: 1 },
         sender: { id: 'user-1', username: 'testuser', avatarUrl: null, nickname: null },
         reactions: [],
       };
@@ -222,7 +224,7 @@ describe('ChatGatewayService', () => {
           senderId: 'user-1',
           content: 'Hello',
           contentType: 'text',
-          metadata: {},
+          metadata: { seq: 1 },
         },
         include: {
           sender: { select: { id: true, username: true, avatarUrl: true, nickname: true } },
@@ -233,7 +235,7 @@ describe('ChatGatewayService', () => {
     });
 
     it('should use defaults when dto fields are missing', async () => {
-      mockPrisma.message.create.mockResolvedValue({ id: 'msg-1' });
+      mockPrisma.message.create.mockResolvedValue({ id: 'msg-1', metadata: { seq: 1 } });
 
       await service.sendMessage('user-1', 'session-1', {});
 
@@ -243,7 +245,7 @@ describe('ChatGatewayService', () => {
           senderId: 'user-1',
           content: '',
           contentType: 'text',
-          metadata: {},
+          metadata: { seq: 1 },
         },
         include: expect.any(Object),
       });
