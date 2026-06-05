@@ -4,18 +4,18 @@ test.describe('Login Page', () => {
   test('should display login form', async ({ page }) => {
     await page.goto('/login');
 
-    await expect(page.getByRole('heading', { name: /sign in|登录|login/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /ai.?native.?chat/i })).toBeVisible();
     await expect(page.getByPlaceholder(/username|email|用户名/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password|密码/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign in|登录|login/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /log.?in|登录/i })).toBeVisible();
   });
 
   test('should show validation error on empty submit', async ({ page }) => {
     await page.goto('/login');
-    await page.getByRole('button', { name: /sign in|登录|login/i }).click();
+    await page.getByRole('button', { name: /log.?in|登录/i }).click();
 
-    // Should show some validation feedback
-    await expect(page.locator('text=required|请填写|必填|请输入')).toBeVisible();
+    // Should show some validation feedback (browser's built-in validation on required fields)
+    await expect(page.locator('input:invalid')).toHaveCount(2);
   });
 
   test('should navigate to register page', async ({ page }) => {
