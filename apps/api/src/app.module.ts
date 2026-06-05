@@ -1,6 +1,7 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import * as path from 'path';
 import { existsSync } from 'fs';
@@ -28,6 +29,19 @@ const ENV_PATH = path.join(__dirname, '..', '..', '..', '.env');
       isGlobal: true,
       envFilePath: existsSync(ENV_PATH) ? [ENV_PATH] : [],
       cache: true,
+    }),
+    BullModule.forRoot({
+      connection: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
+      },
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
     }),
     RedisModule,
     CommonModule,

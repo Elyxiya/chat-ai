@@ -80,6 +80,16 @@ export class ChatGatewayService {
     return session.id;
   }
 
+  /** Assign and return a monotonically increasing sequence number per session. */
+  async assignSeq(sessionId: string): Promise<number> {
+    try {
+      return await this.redis.incr(`seq:${sessionId}`);
+    } catch (err: any) {
+      this.logger.warn(`[SEQ] Redis INCR failed for session ${sessionId}: ${err.message}`);
+      return Date.now();
+    }
+  }
+
   async sendMessage(userId: string, sessionId: string, dto: Partial<SendMessageDto>) {
     const clientMsgId = dto.metadata?.clientMsgId as string | undefined;
 
@@ -107,12 +117,7 @@ export class ChatGatewayService {
     }
 
     // Assign monotonically increasing sequence number per session
-    let seq = Date.now(); // fallback if Redis fails
-    try {
-      seq = await this.redis.incr(`seq:${sessionId}`);
-    } catch (err: any) {
-      this.logger.warn(`[SEQ] Redis INCR failed for session ${sessionId}, using timestamp fallback: ${err.message}`);
-    }
+    const seq = await this.assignSeq(sessionId);
 
     const metadata = {
       ...(dto.metadata || {}),

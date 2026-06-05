@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common';
 import { ChatGatewayService } from './chat-gateway.service';
 import { MetricsService } from '../modules/common/metrics.service';
 import { RedisService } from '../modules/common/redis.service';
+import { ChatQueueService } from '../modules/chat/chat-queue.service';
 
 export enum WsMessageType {
   LOGIN = 0,
@@ -52,10 +53,13 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   private userSockets = new Map<string, Set<string>>();
 
+  private readonly queueEnabled = process.env.QUEUE_ENABLED === 'true';
+
   constructor(
     private readonly chatGatewayService: ChatGatewayService,
     private readonly metrics: MetricsService,
     private readonly redis: RedisService,
+    private readonly chatQueueService: ChatQueueService,
   ) {}
 
   afterInit() {
@@ -181,31 +185,54 @@ export class ChatGateway
       case WsMessageType.AUDIO:
       case WsMessageType.VIDEO: {
         const { sessionId, content, metadata, mentions, replyToId, clientMsgId } = payload.data;
-        const enrichedMetadata = clientMsgId
-          ? { ...(metadata || {}), clientMsgId }
-          : metadata;
 
-        const message = await this.chatGatewayService.sendMessage(
-          user.id,
-          sessionId,
-          { content, contentType: WsMessageType[payload.type].toLowerCase(), metadata: enrichedMetadata, mentions, replyToId },
-        );
+        if (this.queueEnabled && clientMsgId) {
+          // ── 队列模式：消息入 BullMQ，由 Processor 批量写入 + 广播 ──
+          const seq = await this.chatGatewayService.assignSeq(sessionId);
+          const enrichedMetadata = { ...(metadata || {}), clientMsgId, seq };
 
-        // ACK to sender only — confirms the message was persisted
-        if (clientMsgId) {
-          const seq = (message.metadata as any)?.seq;
-          client.emit('message_ack', { clientMsgId, serverMsgId: message.id, seq });
-        }
+          await this.chatQueueService.addToQueue({
+            clientMsgId,
+            sessionId,
+            senderId: user.id,
+            content,
+            contentType: WsMessageType[payload.type].toLowerCase(),
+            metadata: enrichedMetadata,
+            mentions,
+            replyToId,
+            seq,
+            timestamp: Date.now(),
+          });
 
-        this.server.to(`session:${sessionId}`).emit('message', message);
+          // Immediate ACK — message is queued, not yet persisted
+          client.emit('message_ack', { clientMsgId, seq, status: 'queued' });
+        } else {
+          // ── 直写模式：现有逻辑 ──
+          const enrichedMetadata = clientMsgId
+            ? { ...(metadata || {}), clientMsgId }
+            : metadata;
 
-        if (mentions?.length) {
-          for (const mentionedId of mentions) {
-            const userSocks = this.userSockets.get(mentionedId);
-            if (userSocks) {
-              userSocks.forEach((socketId) => {
-                this.server.to(socketId).emit('mention', { message, mentionedBy: user.username });
-              });
+          const message = await this.chatGatewayService.sendMessage(
+            user.id,
+            sessionId,
+            { content, contentType: WsMessageType[payload.type].toLowerCase(), metadata: enrichedMetadata, mentions, replyToId },
+          );
+
+          if (clientMsgId) {
+            const seq = (message.metadata as any)?.seq;
+            client.emit('message_ack', { clientMsgId, serverMsgId: message.id, seq, status: 'sent' });
+          }
+
+          this.server.to(`session:${sessionId}`).emit('message', message);
+
+          if (mentions?.length) {
+            for (const mentionedId of mentions) {
+              const userSocks = this.userSockets.get(mentionedId);
+              if (userSocks) {
+                userSocks.forEach((socketId) => {
+                  this.server.to(socketId).emit('mention', { message, mentionedBy: user.username });
+                });
+              }
             }
           }
         }
