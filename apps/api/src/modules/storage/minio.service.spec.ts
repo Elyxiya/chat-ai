@@ -22,8 +22,6 @@ describe('MinioService', () => {
   let mockConfig: any;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
-
     mockConfig = {
       get: jest.fn((key: string, defaultValue?: any) => {
         const config: Record<string, any> = {
@@ -48,8 +46,12 @@ describe('MinioService', () => {
     service = module.get<MinioService>(MinioService);
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('constructor', () => {
-    it('should create Minio client with config values', () => {
+    it('MINIO-01: should create Minio client with config values', () => {
       expect(mockConfig.get).toHaveBeenCalledWith('MINIO_ENDPOINT', 'localhost');
       expect(mockConfig.get).toHaveBeenCalledWith('MINIO_PORT', '9000');
       expect(mockConfig.get).toHaveBeenCalledWith('MINIO_ACCESS_KEY', 'minioadmin');
@@ -57,7 +59,7 @@ describe('MinioService', () => {
   });
 
   describe('onModuleInit', () => {
-    it('should create bucket if it does not exist', async () => {
+    it('MINIO-02: should create bucket if it does not exist', async () => {
       mockMinioClient.bucketExists.mockResolvedValue(false);
       mockMinioClient.makeBucket.mockResolvedValue(undefined);
 
@@ -67,7 +69,7 @@ describe('MinioService', () => {
       expect(mockMinioClient.makeBucket).toHaveBeenCalledWith('minichat-files', 'us-east-1');
     });
 
-    it('should not create bucket if it already exists', async () => {
+    it('MINIO-03: should not create bucket if it already exists', async () => {
       mockMinioClient.bucketExists.mockResolvedValue(true);
 
       await service.onModuleInit();
@@ -75,7 +77,7 @@ describe('MinioService', () => {
       expect(mockMinioClient.makeBucket).not.toHaveBeenCalled();
     });
 
-    it('should handle initialization errors gracefully', async () => {
+    it('MINIO-04: should handle initialization errors gracefully', async () => {
       mockMinioClient.bucketExists.mockRejectedValue(new Error('Connection refused'));
 
       // Should not throw
@@ -84,7 +86,7 @@ describe('MinioService', () => {
   });
 
   describe('uploadFile', () => {
-    it('should upload buffer with content type', async () => {
+    it('MINIO-05: should upload buffer with content type', async () => {
       mockMinioClient.putObject.mockResolvedValue(undefined);
 
       const buffer = Buffer.from('test data');
@@ -101,7 +103,7 @@ describe('MinioService', () => {
       expect(result.url).toContain('/api/v1/upload/file/download');
     });
 
-    it('should use default content type when not specified', async () => {
+    it('MINIO-06: should use default content type when not specified', async () => {
       mockMinioClient.putObject.mockResolvedValue(undefined);
 
       const buffer = Buffer.from('data');
@@ -118,7 +120,7 @@ describe('MinioService', () => {
   });
 
   describe('getFileStream', () => {
-    it('should return stream and mime type from stat', async () => {
+    it('MINIO-07: should return stream and mime type from stat', async () => {
       const mockStream = { on: jest.fn() };
       mockMinioClient.getObject.mockResolvedValue(mockStream);
       mockMinioClient.statObject.mockResolvedValue({
@@ -131,7 +133,7 @@ describe('MinioService', () => {
       expect(result.mimeType).toBe('image/png');
     });
 
-    it('should return stream without mime type when stat has no content-type', async () => {
+    it('MINIO-08: should return stream without mime type when stat has no content-type', async () => {
       const mockStream = { on: jest.fn() };
       mockMinioClient.getObject.mockResolvedValue(mockStream);
       mockMinioClient.statObject.mockResolvedValue({ metaData: {} });
@@ -141,7 +143,7 @@ describe('MinioService', () => {
       expect(result.mimeType).toBeUndefined();
     });
 
-    it('should throw when file not found', async () => {
+    it('MINIO-09: should throw when file not found', async () => {
       mockMinioClient.getObject.mockRejectedValue(new Error('Not found'));
 
       await expect(service.getFileStream('nonexistent')).rejects.toThrow('Not found');
@@ -149,7 +151,7 @@ describe('MinioService', () => {
   });
 
   describe('deleteFile', () => {
-    it('should remove object from bucket', async () => {
+    it('MINIO-10: should remove object from bucket', async () => {
       mockMinioClient.removeObject.mockResolvedValue(undefined);
 
       await service.deleteFile('uploads/test.txt');
@@ -159,7 +161,7 @@ describe('MinioService', () => {
   });
 
   describe('getFileUrl', () => {
-    it('should return presigned URL', async () => {
+    it('MINIO-11: should return presigned URL', async () => {
       mockMinioClient.presignedGetObject.mockResolvedValue('https://minio.example.com/presigned-url');
 
       const result = await service.getFileUrl('uploads/test.txt');
@@ -174,7 +176,7 @@ describe('MinioService', () => {
   });
 
   describe('fileExists', () => {
-    it('should return true when file exists', async () => {
+    it('MINIO-12: should return true when file exists', async () => {
       mockMinioClient.statObject.mockResolvedValue({});
 
       const result = await service.fileExists('uploads/test.txt');
@@ -182,7 +184,7 @@ describe('MinioService', () => {
       expect(result).toBe(true);
     });
 
-    it('should return false when file does not exist', async () => {
+    it('MINIO-13: should return false when file does not exist', async () => {
       mockMinioClient.statObject.mockRejectedValue(new Error('Not found'));
 
       const result = await service.fileExists('nonexistent');

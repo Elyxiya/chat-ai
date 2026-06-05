@@ -13,6 +13,10 @@ describe('FileParserService', () => {
     service = module.get<FileParserService>(FileParserService);
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   const makeFile = (overrides: Partial<Express.Multer.File> = {}): Express.Multer.File => ({
     fieldname: 'file',
     originalname: 'test.txt',

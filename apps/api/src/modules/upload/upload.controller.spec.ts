@@ -35,7 +35,7 @@ describe('UploadController', () => {
   });
 
   describe('POST /upload/file', () => {
-    it('should upload a file and return file info', async () => {
+    it('UPLOAD-CTRL-01: should upload a file and return file info', async () => {
       const mockFile = {
         originalname: 'test.txt',
         size: 1024,
@@ -59,7 +59,7 @@ describe('UploadController', () => {
       expect(result).toEqual(mockResult);
     });
 
-    it('should throw BadRequestException when no file', async () => {
+    it('UPLOAD-CTRL-02: should throw BadRequestException when no file', async () => {
       await expect(
         controller.uploadFile({ user: { id: 'user-1' } } as any, undefined as any, {}),
       ).rejects.toThrow(BadRequestException);
@@ -67,7 +67,7 @@ describe('UploadController', () => {
   });
 
   describe('POST /upload/image', () => {
-    it('should upload an image file', async () => {
+    it('UPLOAD-CTRL-03: should upload an image file', async () => {
       const mockImage = {
         originalname: 'photo.png',
         size: 2048,
@@ -91,7 +91,7 @@ describe('UploadController', () => {
       expect(result).toEqual(mockResult);
     });
 
-    it('should throw BadRequestException when no image file', async () => {
+    it('UPLOAD-CTRL-04: should throw BadRequestException when no image file', async () => {
       await expect(
         controller.uploadImage({ user: { id: 'user-1' } } as any, undefined as any),
       ).rejects.toThrow(BadRequestException);
@@ -99,7 +99,7 @@ describe('UploadController', () => {
   });
 
   describe('GET /upload/files', () => {
-    it('should list user files with default pagination', async () => {
+    it('UPLOAD-CTRL-05: should list user files with default pagination', async () => {
       const mockResult = { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
       mockUploadService.getUserFiles.mockResolvedValue(mockResult);
 
@@ -109,7 +109,7 @@ describe('UploadController', () => {
       expect(result).toEqual(mockResult);
     });
 
-    it('should list user files with custom pagination', async () => {
+    it('UPLOAD-CTRL-06: should list user files with custom pagination', async () => {
       const mockResult = { items: [], total: 0, page: 2, pageSize: 10, totalPages: 0 };
       mockUploadService.getUserFiles.mockResolvedValue(mockResult);
 
@@ -121,7 +121,7 @@ describe('UploadController', () => {
   });
 
   describe('DELETE /upload/files/:id', () => {
-    it('should delete a file', async () => {
+    it('UPLOAD-CTRL-07: should delete a file', async () => {
       mockUploadService.deleteFile.mockResolvedValue(undefined);
 
       const result = await controller.deleteFile({ user: { id: 'user-1' } } as any, 'file-1');
@@ -161,13 +161,13 @@ describe('FileDownloadController', () => {
   });
 
   describe('GET /upload/file/download', () => {
-    it('should throw BadRequestException when path is missing', async () => {
+    it('DOWNLOAD-CTRL-01: should throw BadRequestException when path is missing', async () => {
       await expect(
         controller.downloadFile('', mockResponse as any),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should stream file when path is valid', async () => {
+    it('DOWNLOAD-CTRL-02: should stream file when path is valid', async () => {
       const mockStream = { pipe: jest.fn() };
       mockMinio.getFileStream.mockResolvedValue({ stream: mockStream, mimeType: 'text/plain' });
 
@@ -178,7 +178,7 @@ describe('FileDownloadController', () => {
       expect(mockStream.pipe).toHaveBeenCalledWith(mockResponse);
     });
 
-    it('should stream file without mimeType when not provided', async () => {
+    it('DOWNLOAD-CTRL-03: should stream file without mimeType when not provided', async () => {
       const mockStream = { pipe: jest.fn() };
       mockMinio.getFileStream.mockResolvedValue({ stream: mockStream, mimeType: undefined });
 
@@ -188,7 +188,7 @@ describe('FileDownloadController', () => {
       expect(mockStream.pipe).toHaveBeenCalledWith(mockResponse);
     });
 
-    it('should throw NotFoundException when file not found in MinIO', async () => {
+    it('DOWNLOAD-CTRL-04: should throw NotFoundException when file not found in MinIO', async () => {
       mockMinio.getFileStream.mockRejectedValue(new Error('Not found'));
 
       await expect(

@@ -59,17 +59,17 @@ describe('ChatGatewayService', () => {
   });
 
   describe('authenticate', () => {
-    it('should return null when no token provided', async () => {
+    it('GATEWAY-SVC-01: should return null when no token provided', async () => {
       const result = await service.authenticate('');
       expect(result).toBeNull();
     });
 
-    it('should return null when token is undefined', async () => {
+    it('GATEWAY-SVC-02: should return null when token is undefined', async () => {
       const result = await service.authenticate(undefined as any);
       expect(result).toBeNull();
     });
 
-    it('should return user when token is valid', async () => {
+    it('GATEWAY-SVC-03: should return user when token is valid', async () => {
       const mockUser = { id: 'user-1', username: 'testuser', avatarUrl: null, status: 'offline', userType: 'human' };
       mockJwtService.verify.mockReturnValue({ sub: 'user-1' });
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
@@ -84,7 +84,7 @@ describe('ChatGatewayService', () => {
       expect(result).toEqual(mockUser);
     });
 
-    it('should return null when token verification fails', async () => {
+    it('GATEWAY-SVC-04: should return null when token verification fails', async () => {
       mockJwtService.verify.mockImplementation(() => { throw new Error('Invalid token'); });
 
       const result = await service.authenticate('invalid-token');
@@ -92,7 +92,7 @@ describe('ChatGatewayService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when user not found', async () => {
+    it('GATEWAY-SVC-05: should return null when user not found', async () => {
       mockJwtService.verify.mockReturnValue({ sub: 'nonexistent' });
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
@@ -103,7 +103,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('setUserOnline', () => {
-    it('should update user status to online and set redis key', async () => {
+    it('GATEWAY-SVC-06: should update user status to online and set redis key', async () => {
       mockPrisma.user.update.mockResolvedValue({ id: 'user-1', status: 'online' });
       mockRedis.set.mockResolvedValue('OK');
 
@@ -120,7 +120,7 @@ describe('ChatGatewayService', () => {
       );
     });
 
-    it('should still proceed when redis is unavailable', async () => {
+    it('GATEWAY-SVC-07: should still proceed when redis is unavailable', async () => {
       mockPrisma.user.update.mockResolvedValue({ id: 'user-1', status: 'online' });
       mockRedis.set.mockRejectedValue(new Error('Redis connection failed'));
 
@@ -129,7 +129,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('setUserOffline', () => {
-    it('should update user status to offline and delete redis key', async () => {
+    it('GATEWAY-SVC-08: should update user status to offline and delete redis key', async () => {
       mockPrisma.user.update.mockResolvedValue({ id: 'user-1', status: 'offline' });
       mockRedis.del.mockResolvedValue(1);
 
@@ -142,7 +142,7 @@ describe('ChatGatewayService', () => {
       expect(mockRedis.del).toHaveBeenCalledWith('online:user-1');
     });
 
-    it('should still proceed when redis is unavailable', async () => {
+    it('GATEWAY-SVC-09: should still proceed when redis is unavailable', async () => {
       mockPrisma.user.update.mockResolvedValue({ id: 'user-1', status: 'offline' });
       mockRedis.del.mockRejectedValue(new Error('Redis connection failed'));
 
@@ -151,7 +151,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('canJoinSession', () => {
-    it('should return true when user is a member', async () => {
+    it('GATEWAY-SVC-10: should return true when user is a member', async () => {
       mockPrisma.chatSessionMember.findUnique.mockResolvedValue({ userId: 'user-1', sessionId: 'session-1' });
 
       const result = await service.canJoinSession('user-1', 'session-1');
@@ -162,7 +162,7 @@ describe('ChatGatewayService', () => {
       });
     });
 
-    it('should return false when user is not a member', async () => {
+    it('GATEWAY-SVC-11: should return false when user is not a member', async () => {
       mockPrisma.chatSessionMember.findUnique.mockResolvedValue(null);
 
       const result = await service.canJoinSession('user-1', 'session-1');
@@ -172,7 +172,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('getOrCreateAgentSession', () => {
-    it('should return existing agent session', async () => {
+    it('GATEWAY-SVC-12: should return existing agent session', async () => {
       const existingSession = { id: 'agent-1', sessionType: 'agent', ownerId: 'user-1' };
       mockPrisma.chatSession.findFirst.mockResolvedValue(existingSession);
 
@@ -182,7 +182,7 @@ describe('ChatGatewayService', () => {
       expect(mockPrisma.chatSession.create).not.toHaveBeenCalled();
     });
 
-    it('should create new agent session when none exists', async () => {
+    it('GATEWAY-SVC-13: should create new agent session when none exists', async () => {
       mockPrisma.chatSession.findFirst.mockResolvedValue(null);
       const newSession = { id: 'new-agent-1' };
       mockPrisma.chatSession.create.mockResolvedValue(newSession);
@@ -204,7 +204,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('sendMessage', () => {
-    it('should create a message in the database', async () => {
+    it('GATEWAY-SVC-14: should create a message in the database', async () => {
       const createdMessage = {
         id: 'msg-1',
         sessionId: 'session-1',
@@ -234,7 +234,7 @@ describe('ChatGatewayService', () => {
       expect(result).toEqual(createdMessage);
     });
 
-    it('should use defaults when dto fields are missing', async () => {
+    it('GATEWAY-SVC-15: should use defaults when dto fields are missing', async () => {
       mockPrisma.message.create.mockResolvedValue({ id: 'msg-1', metadata: { seq: 1 } });
 
       await service.sendMessage('user-1', 'session-1', {});
@@ -253,7 +253,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('recallMessage', () => {
-    it('should mark message as recalled', async () => {
+    it('GATEWAY-SVC-16: should mark message as recalled', async () => {
       const recalledMessage = { id: 'msg-1', isRecalled: true };
       mockPrisma.message.update.mockResolvedValue(recalledMessage);
 
@@ -268,7 +268,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('getMessageById', () => {
-    it('should return message with id and sessionId', async () => {
+    it('GATEWAY-SVC-17: should return message with id and sessionId', async () => {
       const message = { id: 'msg-1', sessionId: 'session-1' };
       mockPrisma.message.findUnique.mockResolvedValue(message);
 
@@ -281,7 +281,7 @@ describe('ChatGatewayService', () => {
       expect(result).toEqual(message);
     });
 
-    it('should return null when message not found', async () => {
+    it('GATEWAY-SVC-18: should return null when message not found', async () => {
       mockPrisma.message.findUnique.mockResolvedValue(null);
 
       const result = await service.getMessageById('nonexistent');
@@ -291,7 +291,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('markRead', () => {
-    it('should update lastReadAt for session member', async () => {
+    it('GATEWAY-SVC-19: should update lastReadAt for session member', async () => {
       mockPrisma.chatSessionMember.update.mockResolvedValue({ userId: 'user-1', sessionId: 'session-1' });
 
       await service.markRead('user-1', 'session-1', 'msg-5');
@@ -304,7 +304,7 @@ describe('ChatGatewayService', () => {
   });
 
   describe('streamAIResponse', () => {
-    it('should yield response chunks from DeepSeek provider', async () => {
+    it('GATEWAY-SVC-20: should yield response chunks from DeepSeek provider', async () => {
       // Mock the dynamic import to return a fake provider
       jest.isolateModules(async () => {
         const mockProvider = {
