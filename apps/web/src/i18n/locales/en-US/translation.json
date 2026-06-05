@@ -101,6 +101,7 @@
     "uploadFile": "Upload file",
     "uploadImage": "Upload image",
     "groupInfo": "Group info",
+    "groupOnly": "This page is only for group chats.",
     "announcement": "Announcement",
     "noAnnouncement": "No announcement set",
     "addAnnouncement": "Add announcement",

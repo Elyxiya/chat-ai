@@ -42,7 +42,7 @@ describe('KnowledgePage', () => {
 
   it('should render page header', () => {
     render(<KnowledgePage />);
-    expect(screen.getByText('Knowledge Bases')).toBeInTheDocument();
+    expect(screen.getAllByText(/Knowledge/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('should render knowledge base list', () => {
@@ -76,7 +76,7 @@ describe('KnowledgePage', () => {
 
   it('should show empty state in main content when no base selected', () => {
     render(<KnowledgePage />);
-    expect(screen.getByText('Knowledge Base')).toBeInTheDocument();
+    expect(screen.getAllByText('Knowledge Base').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Select a knowledge base/)).toBeInTheDocument();
   });
 

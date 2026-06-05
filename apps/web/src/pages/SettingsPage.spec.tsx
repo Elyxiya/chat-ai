@@ -46,7 +46,7 @@ describe('SettingsPage', () => {
   it('should render user profile information', () => {
     render(<SettingsPage />);
     expect(screen.getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Profile')).toBeInTheDocument();
+    expect(screen.getByText('Profile Info')).toBeInTheDocument();
     expect(screen.getByText('testuser')).toBeInTheDocument();
     expect(screen.getByText('test@example.com')).toBeInTheDocument();
   });
@@ -62,7 +62,7 @@ describe('SettingsPage', () => {
     vi.mocked(userApi.updateProfile).mockResolvedValue({});
 
     render(<SettingsPage />);
-    const saveButton = screen.getByText('Save Changes');
+    const saveButton = screen.getByText('Save');
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -76,7 +76,7 @@ describe('SettingsPage', () => {
     vi.mocked(userApi.updateProfile).mockResolvedValue({});
 
     render(<SettingsPage />);
-    const saveButton = screen.getByText('Save Changes');
+    const saveButton = screen.getByText('Save');
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -86,19 +86,19 @@ describe('SettingsPage', () => {
 
   it('should show AI Agent settings section', () => {
     render(<SettingsPage />);
-    expect(screen.getByText('AI Agent Settings')).toBeInTheDocument();
+    expect(screen.getByText('AI Agent')).toBeInTheDocument();
     expect(screen.getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should show Account section with Sign Out button', () => {
+  it('should show Account section with Log Out button', () => {
     render(<SettingsPage />);
-    expect(screen.getByText('Account')).toBeInTheDocument();
-    expect(screen.getByText('Sign Out')).toBeInTheDocument();
+    expect(screen.getByText('Profile Settings')).toBeInTheDocument();
+    expect(screen.getByText('Log Out')).toBeInTheDocument();
   });
 
-  it('should call logout when Sign Out is clicked', () => {
+  it('should call logout when Log Out is clicked', () => {
     render(<SettingsPage />);
-    const signOutButton = screen.getByText('Sign Out');
+    const signOutButton = screen.getByText('Log Out');
     fireEvent.click(signOutButton);
     expect(mockLogout).toHaveBeenCalled();
   });

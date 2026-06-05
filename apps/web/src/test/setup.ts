@@ -30,6 +30,15 @@ Object.defineProperty(window, 'IntersectionObserver', {
   value: MockIntersectionObserver,
 });
 
+// Mock requestAnimationFrame to fire synchronously (needed by batched socket message flush)
+let rafId = 0;
+window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+  rafId++;
+  cb(performance.now());
+  return rafId;
+}) as typeof window.requestAnimationFrame;
+window.cancelAnimationFrame = vi.fn();
+
 // Mock ResizeObserver for jsdom
 class MockResizeObserver {
   constructor() {}
@@ -46,29 +55,29 @@ Object.defineProperty(window, 'ResizeObserver', {
 // Auto-use __mocks__/RichTextEditor.tsx (replaces Tiptap with textarea in tests)
 vi.mock('@/components/RichTextEditor/RichTextEditor');
 
-// Mock react-i18next with English translations matching component & test expectations
-const translationMap: Record<string, string> = {
-  'auth.noAccount': "Don't have an account? Sign up",
-  'auth.haveAccount': 'Already have an account? Sign in',
-  'settings.title': 'Settings',
-  'settings.language': 'Language',
-  'settings.languageZh': '中文',
-  'settings.languageEn': 'English',
-  'settings.defaultAgentMode': 'Default Mode',
-  'profile.profileInfo': 'Profile',
-  'profile.nickname': 'Nickname',
-  'profile.nicknamePlaceholder': 'Enter your nickname',
-  'profile.bio': 'Bio',
-  'profile.bioPlaceholder': 'Tell us about yourself',
-  'common.saving': 'Saving...',
-  'common.save': 'Save Changes',
-  'agent.title': 'AI Agent Settings',
-  'auth.logout': 'Sign Out',
-};
+// Mock react-i18next — load full English translations so tests match rendered text
+import enTranslations from '@/i18n/locales/en-US/translation.json';
+
+/** Flatten nested translation object into dot-separated keys */
+function flatten(obj: Record<string, any>, prefix = ''): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const k = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'object' && value !== null) {
+      Object.assign(result, flatten(value, k));
+    } else {
+      result[k] = String(value);
+    }
+  }
+  return result;
+}
+
+const translationMap = flatten(enTranslations as Record<string, any>);
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => translationMap[key] || key.split('.').pop() || key,
-    i18n: { language: 'zh', changeLanguage: vi.fn() },
+    i18n: { language: 'en', changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: '3rdParty', init: vi.fn() },
   Trans: ({ i18nKey }: { i18nKey: string }) => translationMap[i18nKey] || i18nKey,

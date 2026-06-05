@@ -154,7 +154,7 @@ describe('ChatLayout', () => {
 
     expect(screen.getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('AI Agent')).toBeInTheDocument();
-    expect(screen.getByText('Knowledge Base')).toBeInTheDocument();
+    expect(screen.getByText('Knowledge')).toBeInTheDocument();
   });
 
   it('LAYOUT-WEB-05: should show AI badge on agent nav', async () => {
@@ -178,7 +178,7 @@ describe('ChatLayout', () => {
       );
     });
 
-    fireEvent.click(screen.getByText('Knowledge Base'));
+    fireEvent.click(screen.getByText('Knowledge'));
     expect(mockNavigate).toHaveBeenCalledWith('/knowledge');
   });
 
@@ -191,7 +191,7 @@ describe('ChatLayout', () => {
       );
     });
 
-    fireEvent.click(screen.getByTitle('Switch to dark mode'));
+    fireEvent.click(screen.getByTitle('Dark'));
     expect(mockSetTheme).toHaveBeenCalledWith('dark');
   });
 

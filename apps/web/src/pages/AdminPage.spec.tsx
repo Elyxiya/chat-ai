@@ -59,7 +59,7 @@ describe('AdminPage', () => {
     render(<AdminPage />);
     await waitFor(() => {
       expect(screen.getByText('Users')).toBeInTheDocument();
-      expect(screen.getByText('Settings')).toBeInTheDocument();
+      expect(screen.getByText('System Settings')).toBeInTheDocument();
       expect(screen.getByText('Audit Logs')).toBeInTheDocument();
     });
   });

@@ -245,8 +245,8 @@ describe('agent.store', () => {
       expect(useAgentStore.getState().isStreaming).toBe(false);
     });
 
-    it('AGENT-WEB-14: should handle thinking_done event (appends reasoning to fullContent)', async () => {
-      // thinking_done appends event.data.reasoning to fullContent via: fullContent += incoming
+    it('AGENT-WEB-14: should handle thinking_done event (does not leak reasoning to content)', async () => {
+      // thinking_done is deliberately skipped — reasoning goes to reasoningSteps, not fullContent
       const chunks = [
         streamEvent('chunk', { content: 'Answer' }),
         streamEvent('thinking_done', { reasoning: ' Step by step' }),
@@ -259,12 +259,13 @@ describe('agent.store', () => {
 
       await useAgentStore.getState().sendStreamMessage('Hi');
 
-      // "Answer" + " Step by step" = "Answer Step by step"
-      expect(useAgentStore.getState().messages[1].content).toBe('Answer Step by step');
+      // Content should NOT include "Step by step" — only the chunk content
+      expect(useAgentStore.getState().messages[1].content).toBe('Answer');
     });
 
     it('AGENT-WEB-15: should handle final event with content and reasoning', async () => {
       const chunks = [
+        streamEvent('chunk', { content: 'Final answer' }),
         streamEvent('final', { content: 'Final answer', reasoning: 'My reasoning' }),
         streamEvent('done'),
       ];

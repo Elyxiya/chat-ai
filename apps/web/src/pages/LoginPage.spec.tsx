@@ -42,9 +42,9 @@ describe('LoginPage', () => {
 
     expect(screen.getByText('AI-Native Chat')).toBeInTheDocument();
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter your username or email')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter your password')).toBeInTheDocument();
-    expect(screen.getByText('Sign In')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter password')).toBeInTheDocument();
+    expect(screen.getByText('Log In')).toBeInTheDocument();
   });
 
   it('LOGIN-WEB-02: should toggle to register form', () => {
@@ -54,14 +54,14 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByText("Don't have an account? Sign up"));
+    fireEvent.click(screen.getByText("Don't have an account?"));
 
     expect(screen.getByText('Create your account')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Choose a username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Create a password (min 8 chars)')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Confirm your password')).toBeInTheDocument();
-    expect(screen.getByText('Create Account')).toBeInTheDocument();
+    expect(screen.getByText('Register')).toBeInTheDocument();
   });
 
   it('LOGIN-WEB-03: should toggle back to login form', () => {
@@ -71,11 +71,11 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByText("Don't have an account? Sign up"));
-    fireEvent.click(screen.getByText('Already have an account? Sign in'));
+    fireEvent.click(screen.getByText("Don't have an account?"));
+    fireEvent.click(screen.getByText('Already have an account?'));
 
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
-    expect(screen.getByText('Sign In')).toBeInTheDocument();
+    expect(screen.getByText('Log In')).toBeInTheDocument();
   });
 
   it('LOGIN-WEB-04: should call login on form submission', async () => {
@@ -87,14 +87,14 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your username or email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter username'), {
       target: { value: 'testuser' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Enter your password'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter password'), {
       target: { value: 'password123' },
     });
 
-    fireEvent.click(screen.getByText('Sign In'));
+    fireEvent.click(screen.getByText('Log In'));
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('testuser', 'password123');
@@ -112,14 +112,14 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your username or email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter username'), {
       target: { value: 'testuser' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Enter your password'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter password'), {
       target: { value: 'wrong' },
     });
 
-    fireEvent.click(screen.getByText('Sign In'));
+    fireEvent.click(screen.getByText('Log In'));
 
     await waitFor(() => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe('LoginPage', () => {
     );
 
     // Switch to register
-    fireEvent.click(screen.getByText("Don't have an account? Sign up"));
+    fireEvent.click(screen.getByText("Don't have an account?"));
 
     fireEvent.change(screen.getByPlaceholderText('Choose a username'), {
       target: { value: 'newuser' },
@@ -149,7 +149,7 @@ describe('LoginPage', () => {
       target: { value: 'different' },
     });
 
-    fireEvent.click(screen.getByText('Create Account'));
+    fireEvent.click(screen.getByText('Register'));
 
     await waitFor(() => {
       expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
@@ -168,7 +168,7 @@ describe('LoginPage', () => {
     );
 
     // Switch to register
-    fireEvent.click(screen.getByText("Don't have an account? Sign up"));
+    fireEvent.click(screen.getByText("Don't have an account?"));
 
     fireEvent.change(screen.getByPlaceholderText('Choose a username'), {
       target: { value: 'newuser' },
@@ -183,7 +183,7 @@ describe('LoginPage', () => {
       target: { value: 'password123' },
     });
 
-    fireEvent.click(screen.getByText('Create Account'));
+    fireEvent.click(screen.getByText('Register'));
 
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith({
@@ -206,14 +206,14 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your username or email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter username'), {
       target: { value: 'testuser' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Enter your password'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter password'), {
       target: { value: 'password123' },
     });
 
-    fireEvent.click(screen.getByText('Sign In'));
+    fireEvent.click(screen.getByText('Log In'));
 
     expect(screen.getByText('Signing in...')).toBeInTheDocument();
     // Button should be disabled during loading

@@ -75,14 +75,14 @@ describe('AgentChatPage', () => {
 
   it('should show mode selector with three modes', () => {
     render(<AgentChatPage />);
-    expect(screen.getByText('ReAct')).toBeInTheDocument();
-    expect(screen.getByText('规划')).toBeInTheDocument();
-    expect(screen.getByText('推理')).toBeInTheDocument();
+    expect(screen.getByText('Quick')).toBeInTheDocument();
+    expect(screen.getByText('Planner')).toBeInTheDocument();
+    expect(screen.getByText('Deep Think')).toBeInTheDocument();
   });
 
   it('should call setMode when mode button clicked', () => {
     render(<AgentChatPage />);
-    const plannerButton = screen.getByText('规划');
+    const plannerButton = screen.getByText('Planner');
     fireEvent.click(plannerButton);
     expect(mockSetMode).toHaveBeenCalledWith('planner');
   });
@@ -90,7 +90,7 @@ describe('AgentChatPage', () => {
   it('should show generating status when streaming', () => {
     mockIsStreaming = true;
     render(<AgentChatPage />);
-    expect(screen.getByText('Generating response...')).toBeInTheDocument();
+    expect(screen.getByText('Generating...')).toBeInTheDocument();
   });
 
   it('should render user messages', () => {
@@ -111,7 +111,7 @@ describe('AgentChatPage', () => {
 
   it('should have textarea for input', () => {
     render(<AgentChatPage />);
-    expect(screen.getByPlaceholderText('Ask the AI Agent anything...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Ask the AI agent anything...')).toBeInTheDocument();
   });
 
   it('should show stop button when streaming', () => {
@@ -123,13 +123,13 @@ describe('AgentChatPage', () => {
 
   it('should display mode label below input', () => {
     render(<AgentChatPage />);
-    const modeLabels = screen.getAllByText(/ReAct/);
+    const modeLabels = screen.getAllByText(/Quick/);
     expect(modeLabels.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should show clear conversation button', () => {
     render(<AgentChatPage />);
-    const clearButton = screen.getByTitle('Clear conversation');
+    const clearButton = screen.getByTitle('Clear history');
     expect(clearButton).toBeInTheDocument();
     fireEvent.click(clearButton);
     expect(mockClearMessages).toHaveBeenCalled();

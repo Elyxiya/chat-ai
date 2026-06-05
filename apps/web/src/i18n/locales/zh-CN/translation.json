@@ -101,6 +101,7 @@
     "uploadFile": "上传文件",
     "uploadImage": "上传图片",
     "groupInfo": "群聊信息",
+    "groupOnly": "此页面仅用于群聊。",
     "announcement": "群公告",
     "noAnnouncement": "暂无公告",
     "addAnnouncement": "添加公告",

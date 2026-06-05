@@ -58,7 +58,7 @@ describe('GroupManagementPage', () => {
 
   it('should render back button and header', () => {
     renderWithRouter();
-    expect(screen.getByText('Back to chat')).toBeInTheDocument();
+    expect(screen.getByText('Back')).toBeInTheDocument();
   });
 
   it('should show session type and member count', () => {
@@ -69,13 +69,13 @@ describe('GroupManagementPage', () => {
 
   it('should show search to invite section', () => {
     renderWithRouter();
-    expect(screen.getByText('Search to Invite')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search by username or email...')).toBeInTheDocument();
+    expect(screen.getByText('Search users')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search users')).toBeInTheDocument();
   });
 
   it('should show Group Info section with name', () => {
     renderWithRouter();
-    expect(screen.getByText('Group Info')).toBeInTheDocument();
+    expect(screen.getByText('Group info')).toBeInTheDocument();
     const nameElements = screen.getAllByText('Test Group');
     expect(nameElements.length).toBeGreaterThanOrEqual(2);
   });
@@ -84,6 +84,6 @@ describe('GroupManagementPage', () => {
     mockSessions = [{ ...mockSession, sessionType: 'private', id: 'private-1' }];
     renderWithRouter('private-1');
     expect(screen.getByText('This page is only for group chats.')).toBeInTheDocument();
-    expect(screen.getByText('Go Back')).toBeInTheDocument();
+    expect(screen.getByText('Back')).toBeInTheDocument();
   });
 });
