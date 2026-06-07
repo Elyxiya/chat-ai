@@ -5,12 +5,14 @@ import { useAuthStore } from '@/stores/auth.store';
 import { chatApi } from '@/api/client';
 import { ChatSession } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
+import CreateGroupModal from '@/components/CreateGroupModal/CreateGroupModal';
 
 export default function SessionList() {
   const navigate = useNavigate();
   const { sessions, onlineUsers } = useChatStore();
   const { user } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   const currentPath = window.location.pathname;
 
@@ -44,9 +46,9 @@ export default function SessionList() {
       <div className="px-3 py-2 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Sessions</span>
         <button
-          onClick={() => navigate('/chat')}
+          onClick={() => setShowCreateGroup(true)}
           className="p-1.5 hover:bg-border rounded-lg transition-colors text-text-secondary flex-shrink-0"
-          title="New chat"
+          title="Create group"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -130,6 +132,7 @@ export default function SessionList() {
           </div>
         )}
       </div>
+      {showCreateGroup && <CreateGroupModal onClose={() => setShowCreateGroup(false)} />}
     </div>
   );
 }

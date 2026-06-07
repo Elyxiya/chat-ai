@@ -210,7 +210,7 @@ export default function PrivateChatPage() {
         </div>
         {session?.sessionType === 'group' && (
           <button
-            onClick={() => setShowGroupDetail(true)}
+            onClick={() => navigate(`/group/${session.id}`)}
             className="p-2 hover:bg-border rounded-lg transition-colors"
             title={t('chat.groupInfo')}
           >
