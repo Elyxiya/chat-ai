@@ -381,6 +381,17 @@ export class ChatController {
     return success(null);
   }
 
+  @Patch('sessions/:sessionId/members/:targetUserId/role')
+  @ApiOperation({ summary: 'Set member role (admin/member). Only owner can change roles.' })
+  async setMemberRole(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+    @Param('targetUserId') targetUserId: string,
+    @Body() body: { role: string },
+  ) {
+    return success(await this.chatService.setMemberRole(userId, sessionId, targetUserId, body.role));
+  }
+
   @Get('friends')
   @ApiOperation({ summary: 'Get friend list' })
   async getFriends(@CurrentUser('id') userId: string) {

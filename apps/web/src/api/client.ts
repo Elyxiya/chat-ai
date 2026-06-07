@@ -99,6 +99,8 @@ export const chatApi = {
     apiClient.post(`/chat/sessions/${sessionId}/members`, { userIds }),
   removeMember: (sessionId: string, targetUserId: string) =>
     apiClient.delete(`/chat/sessions/${sessionId}/members/${targetUserId}`),
+  setMemberRole: (sessionId: string, targetUserId: string, role: string) =>
+    apiClient.patch(`/chat/sessions/${sessionId}/members/${targetUserId}/role`, { role }),
 
   getFriends: () => apiClient.get('/chat/friends'),
   searchUsers: (query: string) =>

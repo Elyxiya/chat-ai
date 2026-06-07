@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { RedisService } from '../common/redis.service';
 import { NotificationService } from '../notification/notification.service';
@@ -532,6 +532,30 @@ export class ChatService {
 
     await this.prisma.chatSessionMember.delete({
       where: { sessionId_userId: { sessionId, userId: targetUserId } },
+    });
+  }
+
+  async setMemberRole(userId: string, sessionId: string, targetUserId: string, role: string) {
+    const member = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!member || member.role !== 'owner') {
+      throw new ForbiddenException('Only the owner can manage roles');
+    }
+
+    const target = await this.prisma.chatSessionMember.findUnique({
+      where: { sessionId_userId: { sessionId, userId: targetUserId } },
+    });
+    if (!target) throw new NotFoundException('Member not found');
+    if (target.role === 'owner') throw new ForbiddenException('Cannot change the owner role');
+
+    if (!['member', 'admin'].includes(role)) {
+      throw new BadRequestException('Invalid role. Must be member or admin');
+    }
+
+    return this.prisma.chatSessionMember.update({
+      where: { sessionId_userId: { sessionId, userId: targetUserId } },
+      data: { role },
     });
   }
 

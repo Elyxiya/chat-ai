@@ -43,6 +43,11 @@ export default function ChannelSettingsPage() {
   const [inviteResults, setInviteResults] = useState<SearchUserResult[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSending, setInviteSending] = useState<Set<string>>(new Set());
+  const [sessionName, setSessionName] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [editNameInput, setEditNameInput] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!sessionId) return;
@@ -54,11 +59,10 @@ export default function ChannelSettingsPage() {
       ]);
       const session = sessionRes.data || {};
       setJoinApproval(session.joinApproval || 'none');
+      setSessionName(session.name || '');
       setMembers((membersRes.data || []).filter((m: any) => m.user));
 
       // Find current user's role
-      const currentUserId = (await chatApi.getSession(sessionId)).data?.owner?.id;
-      // Load the applications if admin
       const myMembership = (membersRes.data || []).find((m: any) => m.role === 'owner' || m.role === 'admin');
       if (myMembership) {
         setMyRole(myMembership.role);
@@ -111,6 +115,41 @@ export default function ChannelSettingsPage() {
       await chatApi.deleteChannel(sessionId);
       navigate('/chat');
     } catch { /* ignore */ }
+  };
+
+  const handleUpdateName = async () => {
+    if (!sessionId || !editNameInput.trim()) return;
+    try {
+      await chatApi.updateSession(sessionId, { name: editNameInput.trim() });
+      setSessionName(editNameInput.trim());
+      setEditingName(false);
+    } catch { /* ignore */ }
+  };
+
+  const handleGenerateInviteLink = async () => {
+    if (!sessionId) return;
+    try {
+      const res: any = await chatApi.generateInviteLink(sessionId);
+      const code = res.data?.inviteCode || res.data?.code || '';
+      setInviteLink(`${window.location.origin}/chat?join=${code}`);
+    } catch { /* ignore */ }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  const handleSetRole = async (targetUserId: string, role: string) => {
+    if (!sessionId) return;
+    setProcessing((prev) => new Set(prev).add(`role-${targetUserId}`));
+    try {
+      await chatApi.setMemberRole(sessionId, targetUserId, role);
+      setMembers((prev) => prev.map((m) => m.userId === targetUserId ? { ...m, role } : m));
+    } catch { /* ignore */ }
+    setProcessing((prev) => { const next = new Set(prev); next.delete(`role-${targetUserId}`); return next; });
   };
 
   const handleApprove = async (userId: string) => {
@@ -177,39 +216,66 @@ export default function ChannelSettingsPage() {
             <p className="text-text-secondary text-sm">{t('common.loading')}</p>
           </div>
         ) : activeTab === 'settings' && isOwner ? (
-          <div>
-            <h3 className="text-sm font-semibold mb-3">{t('chat.joinApprovalTitle')}</h3>
-            <div className="space-y-2">
-              {[
-                { value: 'none', label: t('chat.anyoneCanJoin'), desc: t('chat.anyoneCanJoinDesc') },
-                { value: 'approval', label: t('chat.requiresApprovalLabel'), desc: t('chat.requiresApprovalDesc') },
-                { value: 'invite_only', label: t('chat.inviteOnly'), desc: t('chat.inviteOnlyDesc') },
-              ].map((opt) => (
-                <label
-                  key={opt.value}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    joinApproval === opt.value
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-border hover:bg-bg'
-                  }`}
-                >
+          <div className="space-y-6">
+            {/* Channel name */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">{t('chat.channelName')}</h3>
+              {editingName ? (
+                <div className="flex gap-2">
                   <input
-                    type="radio"
-                    name="joinApproval"
-                    value={opt.value}
-                    checked={joinApproval === opt.value}
-                    onChange={() => handleApprovalChange(opt.value)}
-                    className="mt-0.5 accent-primary-600"
+                    type="text"
+                    value={editNameInput}
+                    onChange={(e) => setEditNameInput(e.target.value)}
+                    className="input-field flex-1 text-xs"
+                    autoFocus
                   />
-                  <div>
-                    <p className="text-sm font-medium">{opt.label}</p>
-                    <p className="text-xs text-text-secondary mt-0.5">{opt.desc}</p>
-                  </div>
-                </label>
-              ))}
+                  <button onClick={handleUpdateName} className="btn-primary px-3 py-1 text-xs">Save</button>
+                  <button onClick={() => setEditingName(false)} className="px-3 py-1 text-xs border border-border rounded-lg hover:bg-border">{t('common.cancel')}</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{sessionName}</span>
+                  <button onClick={() => { setEditNameInput(sessionName); setEditingName(true); }} className="text-xs text-primary-600 hover:underline">{t('common.edit') || 'Edit'}</button>
+                </div>
+              )}
             </div>
 
-            <div className="mt-8 pt-6 border-t border-border">
+            {/* Join approval */}
+            <div>
+              <h3 className="text-sm font-semibold mb-3">{t('chat.joinApprovalTitle')}</h3>
+              <div className="space-y-2">
+                {[
+                  { value: 'none', label: t('chat.anyoneCanJoin'), desc: t('chat.anyoneCanJoinDesc') },
+                  { value: 'approval', label: t('chat.requiresApprovalLabel'), desc: t('chat.requiresApprovalDesc') },
+                  { value: 'invite_only', label: t('chat.inviteOnly'), desc: t('chat.inviteOnlyDesc') },
+                ].map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      joinApproval === opt.value
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-border hover:bg-bg'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="joinApproval"
+                      value={opt.value}
+                      checked={joinApproval === opt.value}
+                      onChange={() => handleApprovalChange(opt.value)}
+                      className="mt-0.5 accent-primary-600"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{opt.label}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">{opt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Danger zone */}
+            <div className="pt-6 border-t border-border">
               <h3 className="text-sm font-semibold mb-2 text-red-600">{t('chat.dangerZone')}</h3>
               <p className="text-xs text-text-secondary mb-3">{t('chat.deleteChannelWarning')}</p>
               <button
@@ -277,56 +343,82 @@ export default function ChannelSettingsPage() {
             <h3 className="text-sm font-semibold mb-3">{t('chat.membersCount', { count: members.length })}</h3>
 
             {isAdmin && (
-              <div className="mb-4 p-3 bg-surface border border-border rounded-lg">
-                <p className="text-xs font-medium mb-2">{t('chat.inviteMembers') || 'Invite members'}</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={inviteQuery}
-                    onChange={(e) => setInviteQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchUsers()}
-                    placeholder={t('chat.searchUsers')}
-                    className="input-field flex-1 text-xs"
-                  />
-                  <button
-                    onClick={handleSearchUsers}
-                    disabled={inviteLoading || !inviteQuery.trim()}
-                    className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
-                  >
-                    {inviteLoading ? '...' : t('common.search')}
-                  </button>
+              <div className="mb-4 space-y-3">
+                {/* Invite by search */}
+                <div className="p-3 bg-surface border border-border rounded-lg">
+                  <p className="text-xs font-medium mb-2">{t('chat.inviteMembers') || 'Invite members'}</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inviteQuery}
+                      onChange={(e) => setInviteQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearchUsers()}
+                      placeholder={t('chat.searchUsers')}
+                      className="input-field flex-1 text-xs"
+                    />
+                    <button
+                      onClick={handleSearchUsers}
+                      disabled={inviteLoading || !inviteQuery.trim()}
+                      className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
+                    >
+                      {inviteLoading ? '...' : t('common.search')}
+                    </button>
+                  </div>
+
+                  {inviteResults.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {inviteResults.map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-2 rounded bg-bg">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-full bg-border flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {u.avatarUrl ? (
+                                <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <svg className="w-3 h-3 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm truncate">{u.nickname || u.username}</span>
+                          </div>
+                          <button
+                            onClick={() => handleInviteUser(u.id)}
+                            disabled={inviteSending.has(u.id)}
+                            className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 transition-colors flex-shrink-0"
+                          >
+                            {inviteSending.has(u.id) ? '...' : t('chat.invite') || 'Invite'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {inviteResults.length === 0 && inviteQuery.trim() && !inviteLoading && (
+                    <p className="text-xs text-text-secondary mt-1">{t('admin.noUsers') || 'No users found'}</p>
+                  )}
                 </div>
 
-                {inviteResults.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {inviteResults.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between p-2 rounded bg-bg">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-6 h-6 rounded-full bg-border flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {u.avatarUrl ? (
-                              <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <svg className="w-3 h-3 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                            )}
-                          </div>
-                          <span className="text-sm truncate">{u.nickname || u.username}</span>
-                        </div>
-                        <button
-                          onClick={() => handleInviteUser(u.id)}
-                          disabled={inviteSending.has(u.id)}
-                          className="px-2 py-0.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 transition-colors flex-shrink-0"
-                        >
-                          {inviteSending.has(u.id) ? '...' : t('chat.invite') || 'Invite'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {inviteResults.length === 0 && inviteQuery.trim() && !inviteLoading && (
-                  <p className="text-xs text-text-secondary mt-1">{t('admin.noUsers') || 'No users found'}</p>
-                )}
+                {/* Invite link */}
+                <div className="p-3 bg-surface border border-border rounded-lg">
+                  <p className="text-xs font-medium mb-2">{t('chat.inviteLink') || 'Invite link'}</p>
+                  {inviteLink ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={inviteLink}
+                        readOnly
+                        className="input-field flex-1 text-xs"
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <button onClick={handleCopyLink} className="btn-primary px-3 py-1 text-xs flex-shrink-0">
+                        {copied ? (t('common.copied') || 'Copied!') : (t('common.copy') || 'Copy')}
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={handleGenerateInviteLink} className="px-3 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors">
+                      {t('chat.generateLink') || 'Generate link'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -350,6 +442,15 @@ export default function ChannelSettingsPage() {
                   )}
                   {m.role === 'admin' && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Admin</span>
+                  )}
+                  {isOwner && m.role !== 'owner' && (
+                    <button
+                      onClick={() => handleSetRole(m.userId, m.role === 'admin' ? 'member' : 'admin')}
+                      disabled={processing.has(`role-${m.userId}`)}
+                      className="text-[10px] px-2 py-0.5 border border-border rounded hover:bg-border transition-colors disabled:opacity-50"
+                    >
+                      {processing.has(`role-${m.userId}`) ? '...' : (m.role === 'admin' ? 'Demote' : 'Promote')}
+                    </button>
                   )}
                 </div>
               ))}
