@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
+import { InvalidCredentialsException } from './auth.service';
 import { makeUser } from '../../test/factories/entities.factory';
 
 describe('AuthController', () => {
@@ -82,14 +83,12 @@ describe('AuthController', () => {
     });
 
     it('AUTH-CTRL-04: should throw on wrong password', async () => {
-      const { InvalidCredentialsException } = require('./auth.service');
       mockAuthService.validateUser.mockRejectedValue(new InvalidCredentialsException('wrong_password'));
 
       await expect(controller.login({ identifier: 'test@example.com', password: 'wrong' }, mockRequest)).rejects.toThrow(UnauthorizedException);
     });
 
     it('AUTH-CTRL-05: should throw on non-existent user', async () => {
-      const { InvalidCredentialsException } = require('./auth.service');
       mockAuthService.validateUser.mockRejectedValue(new InvalidCredentialsException('user_not_found'));
 
       await expect(controller.login({ identifier: 'nonexistent@example.com', password: 'password123' }, mockRequest)).rejects.toThrow(UnauthorizedException);

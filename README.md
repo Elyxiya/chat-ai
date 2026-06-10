@@ -229,6 +229,3 @@ docker-compose up -d
 
 访问 http://localhost:8080 使用系统。
 
-## 开源协议
-
-MIT

@@ -62,7 +62,7 @@ const RowRenderer = memo(function RowRenderer({
     <div
       style={style}
       className={`px-5 flex items-start gap-2 ${data.batchMode ? 'cursor-pointer' : ''}`}
-      onClick={data.batchMode && data.onToggleSelect ? () => data.onToggleSelect(msg.id) : undefined}
+      onClick={data.batchMode && data.onToggleSelect ? () => data.onToggleSelect!(msg.id) : undefined}
     >
       {data.batchMode && (
         <div className="flex-shrink-0 pt-4">
@@ -78,11 +78,11 @@ const RowRenderer = memo(function RowRenderer({
         <MessageBubble
           message={msg}
           isOwn={msg.senderId === data.userId}
-          onReply={data.batchMode ? undefined : (data.onReply ? () => data.onReply(msg) : undefined)}
-          onForward={data.batchMode ? undefined : (data.onForward ? () => data.onForward(msg.id) : undefined)}
-          onBookmark={data.batchMode ? undefined : (data.onBookmark ? () => data.onBookmark(msg.id) : undefined)}
-          onReaction={data.batchMode ? undefined : (data.onReaction ? (emoji) => data.onReaction(msg.id, emoji) : undefined)}
-          onEdit={data.batchMode ? undefined : (data.onEdit ? () => data.onEdit(msg) : undefined)}
+          onReply={data.batchMode ? undefined : (data.onReply ? () => data.onReply!(msg) : undefined)}
+          onForward={data.batchMode ? undefined : (data.onForward ? () => data.onForward!(msg.id) : undefined)}
+          onBookmark={data.batchMode ? undefined : (data.onBookmark ? () => data.onBookmark!(msg.id) : undefined)}
+          onReaction={data.batchMode ? undefined : (data.onReaction ? (emoji: string) => data.onReaction!(msg.id, emoji) : undefined)}
+          onEdit={data.batchMode ? undefined : (data.onEdit ? () => data.onEdit!(msg) : undefined)}
           bookmarked={data.bookmarkedIds?.has(msg.id)}
           sessionMembersCount={data.sessionMembersCount}
         />
