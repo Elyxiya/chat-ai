@@ -12,15 +12,23 @@ interface CallState {
   status: CallStatus;
   callType: CallType;
   peer: CallPeer | null;
+  /** The chat session this call belongs to (private chat sessionId) */
+  sessionId: string | null;
+  /** Timestamp when the call was connected (for duration tracking) */
+  callStartTime: number | null;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   peerConnection: RTCPeerConnection | null;
   isMicMuted: boolean;
   isCameraOff: boolean;
+  /** Candidates received before remoteDescription was set — flushed after setRemoteDescription */
+  pendingIceCandidates: RTCIceCandidateInit[];
+  /** Whether setRemoteDescription has been called on the current peerConnection */
+  remoteDescriptionSet: boolean;
 
   // Actions
   setPeer: (peer: CallPeer) => void;
-  startCall: (peerId: string, peerName: string, peerAvatar: string | null | undefined, type: CallType) => Promise<void>;
+  startCall: (peerId: string, peerName: string, peerAvatar: string | null | undefined, type: CallType, sessionId?: string) => Promise<void>;
   acceptCall: (offerData: CallOfferData) => Promise<void>;
   rejectCall: (targetUserId: string) => void;
   endCall: () => void;
@@ -34,6 +42,9 @@ interface CallState {
   _setStatus: (status: CallStatus) => void;
   _setCallType: (type: CallType) => void;
   _handleRemoteToggle: (type: 'audio' | 'video', enabled: boolean) => void;
+  _addPendingCandidate: (candidate: RTCIceCandidateInit) => void;
+  _flushPendingCandidates: (pc?: RTCPeerConnection) => Promise<void>;
+  _setRemoteDescriptionSet: (val: boolean) => void;
   _cleanup: () => void;
 }
 
@@ -79,10 +90,14 @@ export const useCallStore = create<CallState>((set, get) => ({
   peerConnection: null,
   isMicMuted: false,
   isCameraOff: false,
+  sessionId: null,
+  callStartTime: null,
+  pendingIceCandidates: [],
+  remoteDescriptionSet: false,
 
   setPeer: (peer) => set({ peer }),
 
-  startCall: async (peerId, peerName, peerAvatar, type) => {
+  startCall: async (peerId, peerName, peerAvatar, type, sessionId) => {
     const state = get();
     if (state.status !== 'idle') return;
 
@@ -93,13 +108,22 @@ export const useCallStore = create<CallState>((set, get) => ({
       };
       const localStream = await getLocalMedia(constraints);
 
-      let onIceCandidateFn: (candidate: RTCIceCandidate) => void = () => {};
-      let onTrackFn: (stream: MediaStream) => void = () => {};
+      const socket = (await import('@/stores/chat.store')).useChatStore.getState().socket;
+      if (!socket?.connected) {
+        console.warn('Socket not connected — cannot start call');
+        get()._cleanup();
+        return;
+      }
 
       const pc = createPeerConnection(
         { ...state, endCall: get().endCall },
-        (candidate) => onIceCandidateFn(candidate),
-        (stream) => onTrackFn(stream),
+        async (candidate) => {
+          const s = (await import('@/stores/chat.store')).useChatStore.getState().socket;
+          s?.emit('call:ice-candidate', { targetUserId: peerId, candidate });
+        },
+        (stream) => {
+          set({ remoteStream: stream });
+        },
       );
 
       localStream.getTracks().forEach((track) => {
@@ -112,26 +136,18 @@ export const useCallStore = create<CallState>((set, get) => ({
       set({
         status: 'calling',
         callType: type,
+        sessionId: sessionId || null,
         peer: { id: peerId, username: peerName, avatarUrl: peerAvatar },
         localStream,
         peerConnection: pc,
       });
 
-      // Expose callbacks for CallController to wire up
-      const socket = (await import('@/stores/chat.store')).useChatStore.getState().socket;
-      socket?.emit('call:offer', {
+      socket.emit('call:offer', {
         targetUserId: peerId,
         sdp: pc.localDescription,
         callType: type,
+        sessionId: sessionId || null,
       });
-
-      onIceCandidateFn = (candidate) => {
-        socket?.emit('call:ice-candidate', { targetUserId: peerId, candidate });
-      };
-
-      onTrackFn = (stream) => {
-        set({ remoteStream: stream });
-      };
     } catch (err: unknown) {
       console.error('Failed to start call:', err);
       get()._cleanup();
@@ -149,11 +165,12 @@ export const useCallStore = create<CallState>((set, get) => ({
       };
       const localStream = await getLocalMedia(constraints);
 
-      let onIceCandidateFn: (candidate: RTCIceCandidate) => void = () => {};
-
       const pc = createPeerConnection(
         { ...state, endCall: get().endCall },
-        (candidate) => onIceCandidateFn(candidate),
+        async (candidate) => {
+          const s = (await import('@/stores/chat.store')).useChatStore.getState().socket;
+          s?.emit('call:ice-candidate', { targetUserId: offerData.callerId, candidate });
+        },
         (stream) => set({ remoteStream: stream }),
       );
 
@@ -165,9 +182,15 @@ export const useCallStore = create<CallState>((set, get) => ({
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
+      // Mark remoteDescription as set and flush any candidates that arrived during setup
+      get()._setRemoteDescriptionSet(true);
+      await get()._flushPendingCandidates(pc);
+
       set({
         status: 'connected',
+        callStartTime: Date.now(),
         localStream,
+        sessionId: offerData.sessionId || state.sessionId,
         peerConnection: pc,
       });
 
@@ -176,10 +199,6 @@ export const useCallStore = create<CallState>((set, get) => ({
         targetUserId: offerData.callerId,
         sdp: pc.localDescription,
       });
-
-      onIceCandidateFn = (candidate) => {
-        socket?.emit('call:ice-candidate', { targetUserId: offerData.callerId, candidate });
-      };
     } catch (err: unknown) {
       console.error('Failed to accept call:', err);
       get()._cleanup();
@@ -194,7 +213,22 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 
   endCall: () => {
-    const { peer } = get();
+    const { peer, sessionId, callStartTime, callType } = get();
+    // Write call history message to the chat session
+    if (sessionId && peer) {
+      const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+      const min = Math.floor(duration / 60);
+      const sec = duration % 60;
+      const durationStr = duration > 0 ? ` (${min}:${sec.toString().padStart(2, '0')})` : '';
+      const callLabel = callType === 'video' ? '📹 Video call' : '📞 Voice call';
+      import('@/stores/chat.store').then(({ useChatStore }) => {
+        useChatStore.getState().socket?.emit('message', {
+          type: 2, // TEXT
+          data: { sessionId, content: `${callLabel}${durationStr}`, contentType: 'system' },
+          timestamp: Date.now(),
+        });
+      });
+    }
     if (peer && peer.id) {
       import('@/stores/chat.store').then(({ useChatStore }) => {
         useChatStore.getState().socket?.emit('call:end', { targetUserId: peer.id });
@@ -257,6 +291,27 @@ export const useCallStore = create<CallState>((set, get) => ({
     }
   },
 
+  _addPendingCandidate: (candidate) => {
+    set({ pendingIceCandidates: [...get().pendingIceCandidates, candidate] });
+  },
+
+  _flushPendingCandidates: async (pc) => {
+    const targetPC = pc ?? get().peerConnection;
+    if (!targetPC) return;
+    const candidates = get().pendingIceCandidates;
+    if (candidates.length === 0) return;
+    for (const c of candidates) {
+      try {
+        await targetPC.addIceCandidate(new RTCIceCandidate(c));
+      } catch {
+        // Silently ignore addIceCandidate errors (e.g. duplicate candidates)
+      }
+    }
+    set({ pendingIceCandidates: [] });
+  },
+
+  _setRemoteDescriptionSet: (val) => set({ remoteDescriptionSet: val }),
+
   _cleanup: () => {
     const { localStream, remoteStream, peerConnection } = get();
     localStream?.getTracks().forEach((t) => t.stop());
@@ -265,12 +320,16 @@ export const useCallStore = create<CallState>((set, get) => ({
     set({
       status: 'idle',
       callType: 'video',
+      sessionId: null,
+      callStartTime: null,
       peer: null,
       localStream: null,
       remoteStream: null,
       peerConnection: null,
       isMicMuted: false,
       isCameraOff: false,
+      pendingIceCandidates: [],
+      remoteDescriptionSet: false,
     });
   },
 }));

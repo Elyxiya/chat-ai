@@ -14,7 +14,7 @@ import { NotificationModule } from '../notification/notification.module';
     UserModule,
     forwardRef(() => NotificationModule),
     BullModule.registerQueue({
-      name: 'chat:messages',
+      name: 'chat-messages',
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },

@@ -195,6 +195,7 @@ export interface CallOfferData {
   callerAvatar?: string | null;
   sdp: any;
   callType: CallType;
+  sessionId?: string | null;
 }
 
 export interface CallAnswerData {

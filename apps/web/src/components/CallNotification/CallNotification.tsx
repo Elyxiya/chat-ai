@@ -49,7 +49,8 @@ export default function CallNotification() {
   useEffect(() => {
     const socket = useChatStore.getState().socket;
     if (!socket) return;
-    const endHandler = () => {
+    const endHandler = (data: { userId: string }) => {
+      if (data.userId !== incoming?.callerId) return;
       setIncoming(null);
     };
     socket.on('call:ended', endHandler);

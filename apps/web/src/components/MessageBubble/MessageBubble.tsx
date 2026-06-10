@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { renderMarkdown } from '@/utils/markdown';
 import { chatApi } from '@/api/client';
@@ -28,7 +28,7 @@ interface MessageBubbleProps {
   sessionMembersCount?: number;
 }
 
-export default function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, onEdit, bookmarked, sessionMembersCount }: MessageBubbleProps) {
+function MessageBubble({ message, isOwn, onReaction, onReply, onForward, onBookmark, onEdit, bookmarked, sessionMembersCount }: MessageBubbleProps) {
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
@@ -332,12 +332,14 @@ export default function MessageBubble({ message, isOwn, onReaction, onReply, onF
   );
 }
 
+export default memo(MessageBubble);
+
 function renderContentWithMentions(content: string): React.ReactNode {
-  // Split by @all and @everyone mentions and wrap them in highlighted spans
-  const parts = content.split(/(\B@(?:all|everyone)\b)/gi);
+  // Highlight @all, @everyone and @username mentions
+  const parts = content.split(/(\B@(?:all|everyone|[a-zA-Z0-9_一-鿿]+)\b)/gi);
   if (parts.length === 1) return content;
   return parts.map((part, i) =>
-    /^\B@(all|everyone)\b$/i.test(part)
+    /^\B@(?:all|everyone|[a-zA-Z0-9_一-鿿]+)$/i.test(part)
       ? <span key={i} className="inline-block px-1.5 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs font-semibold">{part}</span>
       : part,
   );

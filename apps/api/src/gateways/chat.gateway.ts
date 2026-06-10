@@ -451,12 +451,11 @@ export class ChatGateway
     if (!user) return;
 
     const targetSockets = this.userSockets.get(data.targetUserId);
-    if (targetSockets) {
-      targetSockets.forEach((socketId) => {
-        this.server.to(socketId).emit('call:ended', {
-          userId: user.id,
-          reason: 'reject',
-        });
+    if (targetSockets && targetSockets.size > 0) {
+      const firstSocket = [...targetSockets][0];
+      this.server.to(firstSocket).emit('call:ended', {
+        userId: user.id,
+        reason: 'reject',
       });
     }
   }
@@ -470,12 +469,11 @@ export class ChatGateway
     if (!user) return;
 
     const targetSockets = this.userSockets.get(data.targetUserId);
-    if (targetSockets) {
-      targetSockets.forEach((socketId) => {
-        this.server.to(socketId).emit('call:ended', {
-          userId: user.id,
-          reason: 'hangup',
-        });
+    if (targetSockets && targetSockets.size > 0) {
+      const firstSocket = [...targetSockets][0];
+      this.server.to(firstSocket).emit('call:ended', {
+        userId: user.id,
+        reason: 'hangup',
       });
     }
   }

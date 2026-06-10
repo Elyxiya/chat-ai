@@ -71,29 +71,28 @@ describe('AuthController', () => {
 
   describe('login', () => {
     it('AUTH-CTRL-03: should login with correct credentials', async () => {
-      const dto = { identifier: 'testuser', password: 'Password123' };
       const userPayload = { id: 'user-1', username: 'testuser', email: 'test@example.com', userType: 'human' as const };
       const tokens = { accessToken: 'token', refreshToken: 'refresh', user: userPayload };
-      mockAuthService.validateUser.mockResolvedValue(userPayload);
+      mockRequest.user = userPayload;
       mockAuthService.login.mockResolvedValue(tokens);
 
-      const result = await controller.login(dto);
+      const result = await controller.login({ identifier: 'test@example.com', password: 'password123' }, mockRequest);
 
       expect((result as any).data).toEqual(tokens);
     });
 
     it('AUTH-CTRL-04: should throw on wrong password', async () => {
-      const dto = { identifier: 'testuser', password: 'WrongPassword' };
-      mockAuthService.validateUser.mockResolvedValue(null);
+      const { InvalidCredentialsException } = require('./auth.service');
+      mockAuthService.validateUser.mockRejectedValue(new InvalidCredentialsException('wrong_password'));
 
-      await expect(controller.login(dto)).rejects.toThrow(UnauthorizedException);
+      await expect(controller.login({ identifier: 'test@example.com', password: 'wrong' }, mockRequest)).rejects.toThrow(UnauthorizedException);
     });
 
     it('AUTH-CTRL-05: should throw on non-existent user', async () => {
-      const dto = { identifier: 'nonexistent', password: 'Password123' };
-      mockAuthService.validateUser.mockResolvedValue(null);
+      const { InvalidCredentialsException } = require('./auth.service');
+      mockAuthService.validateUser.mockRejectedValue(new InvalidCredentialsException('user_not_found'));
 
-      await expect(controller.login(dto)).rejects.toThrow(UnauthorizedException);
+      await expect(controller.login({ identifier: 'nonexistent@example.com', password: 'password123' }, mockRequest)).rejects.toThrow(UnauthorizedException);
     });
   });
 

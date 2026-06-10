@@ -6,13 +6,12 @@ import {
   HttpCode,
   HttpStatus,
   Get,
-  UnauthorizedException,
   Req,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
+import { AuthService, InvalidCredentialsException } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto, RegisterDto, RefreshTokenDto, SendCodeDto, ResetPasswordDto, ChangePasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -37,11 +36,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Login with username/email and password' })
-  async login(@Body() dto: LoginDto) {
-    const user = await this.authService.validateUser(dto.identifier, dto.password);
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+  async login(@Body() _dto: LoginDto, @Req() req: Request) {
+    const user = req.user as any;
     return success(await this.authService.login(user));
   }
 

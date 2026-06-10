@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -12,9 +12,18 @@ interface RichTextEditorProps {
   minHeight?: string;
   maxHeight?: string;
   onSend?: () => void;
+  /** Return true to prevent ProseMirror from handling the key event */
+  onKeyDown?: (event: KeyboardEvent) => boolean;
 }
 
-export default function RichTextEditor({
+export interface RichTextEditorHandle {
+  /** Replace the last @word in the editor with @username + space */
+  replaceMention: (username: string) => void;
+  /** Get the cursor position in viewport coordinates for dropdown placement */
+  getCursorCoords: () => { top: number; left: number } | null;
+}
+
+const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor({
   value,
   onChange,
   placeholder = 'Type a message...',
@@ -22,7 +31,8 @@ export default function RichTextEditor({
   minHeight = '40px',
   maxHeight = '160px',
   onSend,
-}: RichTextEditorProps) {
+  onKeyDown,
+}, ref) {
   const [showPreview, setShowPreview] = useState(false);
 
   const editor = useEditor({
@@ -42,6 +52,10 @@ export default function RichTextEditor({
         style: `min-height: ${minHeight}; max-height: ${maxHeight};`,
       },
       handleKeyDown: (_view, event) => {
+        // Give parent a chance to intercept (e.g. mention dropdown navigation)
+        if (onKeyDown && onKeyDown(event)) {
+          return true;
+        }
         if (event.key === 'Enter' && !event.shiftKey && onSend) {
           event.preventDefault();
           onSend();
@@ -52,6 +66,38 @@ export default function RichTextEditor({
     },
     autofocus: autoFocus ? 'end' : false,
   });
+
+  // Expose methods for mention insertion
+  useImperativeHandle(ref, () => ({
+    replaceMention: (username) => {
+      if (!editor) return;
+      const { from, to } = editor.state.selection;
+      const textBefore = editor.state.doc.textBetween(0, from, ' ');
+      // Find the last '@' before cursor
+      const atIdx = textBefore.lastIndexOf('@');
+      if (atIdx === -1) return;
+      // Replace from '@' to cursor with '@username '
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: atIdx + 1, to })
+        .insertContent(`${username} `)
+        .run();
+    },
+    getCursorCoords: () => {
+      if (!editor) return null;
+      const { view } = editor;
+      const coords = view.coordsAtPos(view.state.selection.from);
+      if (!coords) return null;
+      const editorEl = view.dom.closest('.ProseMirror') as HTMLElement | null;
+      if (!editorEl) return null;
+      const editorRect = editorEl.getBoundingClientRect();
+      return {
+        left: coords.left,
+        top: editorRect.bottom + 4,
+      };
+    },
+  }));
 
   const handleTogglePreview = useCallback(() => {
     setShowPreview((p) => !p);
@@ -221,4 +267,6 @@ export default function RichTextEditor({
       )}
     </div>
   );
-}
+});
+
+export default RichTextEditor;

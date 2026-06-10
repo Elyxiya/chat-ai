@@ -29,23 +29,37 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
 
       login: async (identifier, password) => {
-        const res: any = await authApi.login(identifier, password);
-        set({
-          user: res.data.data?.user,
-          accessToken: res.data.data?.accessToken,
-          refreshToken: res.data.data?.refreshToken,
-          isAuthenticated: true,
-        });
+        try {
+          const res: any = await authApi.login(identifier, password);
+          set({
+            user: res.data.data?.user,
+            accessToken: res.data.data?.accessToken,
+            refreshToken: res.data.data?.refreshToken,
+            isAuthenticated: true,
+          });
+        } catch (err: any) {
+          const error: any = new Error(err.response?.data?.message || err.message || 'Login failed');
+          error.code = err.response?.data?.description || '';
+          error.status = err.response?.status;
+          throw error;
+        }
       },
 
       register: async (data) => {
-        const res: any = await authApi.register(data);
-        set({
-          user: res.data.user,
-          accessToken: res.data.accessToken,
-          refreshToken: res.data.refreshToken,
-          isAuthenticated: true,
-        });
+        try {
+          const res: any = await authApi.register(data);
+          set({
+            user: res.data.user,
+            accessToken: res.data.accessToken,
+            refreshToken: res.data.refreshToken,
+            isAuthenticated: true,
+          });
+        } catch (err: any) {
+          const error: any = new Error(err.response?.data?.message || err.message || 'Registration failed');
+          error.code = err.response?.data?.description || '';
+          error.status = err.response?.status;
+          throw error;
+        }
       },
 
       logout: (reason?: 'expired' | 'manual') => {

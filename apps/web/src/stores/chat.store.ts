@@ -83,7 +83,7 @@ interface ChatState {
   loadMessages: (sessionId: string, params?: { limit?: number; before?: string }) => Promise<void>;
   /** 追加加载更早的消息（prepend），返回新增条数用于滚动补偿 */
   loadMoreMessages: (sessionId: string, before: string) => Promise<number>;
-  sendMessage: (sessionId: string, content: string, contentType?: string) => void;
+  sendMessage: (sessionId: string, content: string, contentType?: string, mentions?: string[]) => void;
   sendFileMessage: (sessionId: string, url: string, fileType: string, fileName?: string, fileSize?: number) => void;
   sendTyping: (sessionId: string, isTyping: boolean) => void;
   recallMessage: (messageId: string) => Promise<void>;
@@ -300,6 +300,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     });
 
+    socket.on('mention', ({ message, mentionedBy }: { message: ChatMessage; mentionedBy: string }) => {
+      useNotificationStore.getState().addNotification({
+        id: `mention-${message.id}`,
+        type: 'mention',
+        title: `@mentioned by ${mentionedBy}`,
+        content: message.content.slice(0, 100),
+        data: { messageId: message.id, sessionId: message.sessionId },
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+    });
+
     socket.on('reaction', ({ messageId, sessionId, emoji, userId: rUserId }: { messageId: string; sessionId: string; emoji: string; userId: string }) => {
       set((state) => {
         const msgs = state.messages[sessionId];
@@ -432,7 +444,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: (sessionId, content, contentType = 'text') => {
+  sendMessage: (sessionId, content, contentType = 'text', mentions) => {
     const { socket, messages } = get();
     if (!socket) return;
 
@@ -445,7 +457,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       senderId: user?.id || null,
       content,
       contentType: contentType as any,
-      metadata: {},
+      metadata: { mentions },
       isRecalled: false,
       isPinned: false,
       updatedAt: new Date().toISOString(),
@@ -468,11 +480,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
     });
 
+    const payload: Record<string, any> = { sessionId, content, contentType, clientMsgId };
+    if (mentions?.length) payload.mentions = mentions;
+
     // Track for ACK + retry
     const entry: PendingEntry = {
       clientMsgId,
       wsType: WsMessageType.TEXT,
-      data: { sessionId, content, contentType },
+      data: payload,
       retryCount: 0,
       timer: setTimeout(() => scheduleRetry(entry), ACK_TIMEOUT),
     };
@@ -481,7 +496,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Emit to server with clientMsgId for idempotent dedup
     socket.emit('message', {
       type: WsMessageType.TEXT,
-      data: { sessionId, content, contentType, clientMsgId },
+      data: payload,
       timestamp: Date.now(),
     });
   },
@@ -511,9 +526,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   markRead: (sessionId) => {
-    const { messages } = get();
+    const { messages, sessions } = get();
     const msgs = messages[sessionId];
     if (!msgs?.length) return;
+    // Immediately clear local unread count so the badge disappears without waiting for the API
+    set({
+      sessions: sessions.map((s) =>
+        s.id === sessionId ? { ...s, unreadCount: 0 } : s,
+      ),
+    });
     chatApi.markRead(sessionId, msgs[msgs.length - 1].id).catch(() => {});
   },
 

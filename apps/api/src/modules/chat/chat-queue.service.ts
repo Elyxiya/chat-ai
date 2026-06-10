@@ -20,7 +20,7 @@ export class ChatQueueService {
   private readonly logger = new Logger(ChatQueueService.name);
 
   constructor(
-    @InjectQueue('chat:messages') private readonly messageQueue: Queue,
+    @InjectQueue('chat-messages') private readonly messageQueue: Queue,
   ) {}
 
   async addToQueue(msg: QueuedMessage): Promise<void> {

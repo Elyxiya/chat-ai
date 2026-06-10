@@ -23,6 +23,12 @@ import {
   ChangePasswordDto,
 } from './dto/auth.dto';
 
+export class InvalidCredentialsException extends UnauthorizedException {
+  constructor(cause: 'user_not_found' | 'wrong_password') {
+    super(cause === 'user_not_found' ? 'User not found' : 'Incorrect password', cause);
+  }
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -64,17 +70,25 @@ export class AuthService {
   async validateUser(
     identifier: string,
     password: string,
-  ): Promise<UserPayload | null> {
+  ): Promise<UserPayload> {
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [{ username: identifier }, { email: identifier }],
       },
     });
 
-    if (!user) return null;
+    if (!user) {
+      throw new InvalidCredentialsException('user_not_found');
+    }
+
+    if (!user.passwordHash) {
+      throw new InvalidCredentialsException('user_not_found');
+    }
 
     const isValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isValid) return null;
+    if (!isValid) {
+      throw new InvalidCredentialsException('wrong_password');
+    }
 
     return {
       id: user.id,

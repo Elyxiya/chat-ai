@@ -12,6 +12,9 @@ import NotificationPanel from '@/components/NotificationPanel/NotificationPanel'
 import UserSearchModal from '@/components/UserSearch/UserSearchModal';
 import GlobalSearchModal from '@/components/GlobalSearchModal';
 import FriendList from '@/components/FriendList/FriendList';
+import CallController from '@/components/CallController/CallController';
+import CallNotification from '@/components/CallNotification/CallNotification';
+import CallWindow from '@/components/CallWindow/CallWindow';
 
 export default function ChatLayout() {
   const { t } = useTranslation();
@@ -287,6 +290,9 @@ export default function ChatLayout() {
     <NotificationPanel />
     {showSearch && <UserSearchModal onClose={() => setShowSearch(false)} />}
     {showGlobalSearch && <GlobalSearchModal onClose={() => setShowGlobalSearch(false)} />}
+    <CallController />
+    <CallNotification />
+    <CallWindow />
     </>
   );
 }

@@ -29,21 +29,56 @@ export class MemoryService {
 
   async getShortTermMemory(userId: string, limit = 50): Promise<any[]> {
     const key = `memory:short:${userId}`;
-    // Ensure stop is always a valid integer to avoid Redis protocol errors
     const stop = Number.isFinite(limit) ? Math.floor(limit) - 1 : 49;
     try {
       const raw = await this.redis.lrange(key, 0, stop);
-      const parsed = raw.map((r) => {
+      const recentMemories = raw.map((r) => {
+        try {
+          return JSON.parse(r);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean).reverse();
+
+      const totalTokens = recentMemories.reduce(
+        (sum, m) => sum + this.estimateTokenCount(m.content || ''),
+        0,
+      );
+      if (totalTokens >= 3000 && recentMemories.length >= 10) {
+        this.logger.log(`[${userId}] Memory token count ${totalTokens} >= 3000, triggering auto-compress`);
+        await this.summarizeAndCompress(userId);
+        return this.getShortTermMemory(userId, limit);
+      }
+
+      return recentMemories;
+    } catch (err: any) {
+      this.logger.warn(`[${userId}] getShortTermMemory failed (Redis unavailable): ${err.message}`);
+      return [];
+    }
+  }
+
+  private estimateTokenCount(text: string): number {
+    return Math.ceil(text.length / 2);
+  }
+
+  async shouldCompress(userId: string, threshold = 3000): Promise<boolean> {
+    const key = `memory:short:${userId}`;
+    try {
+      const raw = await this.redis.lrange(key, 0, 4999); // fetch up to 5000 items for token counting
+      const memories = raw.map((r) => {
         try {
           return JSON.parse(r);
         } catch {
           return null;
         }
       }).filter(Boolean);
-      return parsed.reverse();
-    } catch (err: any) {
-      this.logger.warn(`[${userId}] getShortTermMemory failed (Redis unavailable): ${err.message}`);
-      return [];
+      const totalTokens = memories.reduce(
+        (sum, m) => sum + this.estimateTokenCount(m.content || ''),
+        0,
+      );
+      return totalTokens >= threshold;
+    } catch {
+      return false;
     }
   }
 

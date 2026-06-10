@@ -5,15 +5,11 @@ import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useCallStore } from '@/stores/call.store';
 import { ChatMessage } from '@/types';
-import CallController from '@/components/CallController/CallController';
-import CallNotification from '@/components/CallNotification/CallNotification';
-import CallWindow from '@/components/CallWindow/CallWindow';
 import VirtualizedMessageList from '@/components/VirtualizedMessageList/VirtualizedMessageList';
-import FileUploadPanel from '@/components/FileUpload/FileUploadPanel';
 import ForwardModal from '@/components/ForwardModal';
 import GroupDetailPanel from '@/components/GroupDetailPanel';
-import RichTextEditor from '@/components/RichTextEditor/RichTextEditor';
-import { chatApi, uploadApi } from '@/api/client';
+import MentionDropdown from '@/components/MentionDropdown';
+import { chatApi } from '@/api/client';
 
 export default function PrivateChatPage() {
   const { t } = useTranslation();
@@ -29,7 +25,6 @@ export default function PrivateChatPage() {
     setActiveSession,
     loadMessages,
     sendMessage,
-    sendFileMessage,
     sendTyping,
   } = useChatStore();
 
@@ -40,6 +35,16 @@ export default function PrivateChatPage() {
   const [showGroupDetail, setShowGroupDetail] = useState(false);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // ── @mention state ──
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const lastAtPosRef = useRef(-1);
+  const mentionFilteredRef = useRef<Array<{ id: string; username: string; nickname?: string | null; avatarUrl?: string | null }>>([]);
+  const mentionUsersRef = useRef<Array<{ id: string; username: string; nickname?: string | null; avatarUrl?: string | null }>>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
   const session = sessions.find((s) => s.id === sessionId);
@@ -57,44 +62,57 @@ export default function PrivateChatPage() {
     }
   }, [sessionId, activeSessionId, setActiveSession, loadMessages]);
 
+  // Update mention candidate list when session members change
+  useEffect(() => {
+    if (session?.members) {
+      mentionUsersRef.current = session.members
+        .filter((m) => m.user.id !== user?.id)
+        .map((m) => ({
+          id: m.user.id,
+          username: m.user.username,
+          nickname: m.user.nickname,
+          avatarUrl: m.user.avatarUrl,
+        }));
+    }
+  }, [session?.members, user?.id]);
+
+  // Close mention dropdown on outside click
+  useEffect(() => {
+    if (!mentionOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.ProseMirror') || target.closest('.z-50')) return;
+      setMentionOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [mentionOpen]);
+
   const handleSend = useCallback(() => {
     if (!input.trim() || !sessionId) return;
     const content = input.trim();
+    // Resolve @username mentions from content + tracked mention IDs
+    const mentionedIds = [...mentionedUserIds];
     if (replyTo) {
       // Send with reply via socket — metadata carries replyToId
       const { socket } = useChatStore.getState();
+      const payload: Record<string, any> = { sessionId, content, contentType: 'text', replyToId: replyTo.id };
+      if (mentionedIds.length) payload.mentions = mentionedIds;
       socket?.emit('message', {
         type: 0, // TEXT
-        data: { sessionId, content, contentType: 'text', replyToId: replyTo.id },
+        data: payload,
         timestamp: Date.now(),
       });
     } else {
-      sendMessage(sessionId, content);
+      sendMessage(sessionId, content, 'text', mentionedIds.length ? mentionedIds : undefined);
     }
     setInput('');
     setReplyTo(null);
+    setMentionedUserIds([]);
+    setMentionOpen(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTyping(sessionId, false);
-  }, [input, replyTo, sessionId, sendMessage, sendTyping]);
-
-  const handleFileUpload = useCallback(async (files: File[]) => {
-    if (!sessionId) return;
-    for (const file of files) {
-      try {
-        const isImage = file.type.startsWith('image/');
-        const setProgress = (_pct: number) => {
-          // Progress tracking handled by uploadApi internally
-        };
-        const res: any = await (isImage
-          ? uploadApi.uploadImage(file, setProgress)
-          : uploadApi.uploadFile(file, setProgress));
-        const url = res.data?.url || res.url;
-        sendFileMessage(sessionId, url, isImage ? 'image' : 'file', file.name, file.size);
-      } catch (err) {
-        console.error('Upload failed:', err);
-      }
-    }
-  }, [sessionId, sendFileMessage]);
+  }, [input, replyTo, sessionId, sendMessage, sendTyping, mentionedUserIds]);
 
   const typingUsersList = sessionId ? typingUsers[sessionId] || [] : [];
   const handleReply = useCallback((msg: ChatMessage) => {
@@ -225,7 +243,7 @@ export default function PrivateChatPage() {
             <button
               onClick={() => {
                 const peer = otherMembers[0].user;
-                useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'audio');
+                useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'audio', session.id);
               }}
               className="p-2 hover:bg-border rounded-lg transition-colors"
               title={t('chat.voiceCall')}
@@ -237,7 +255,7 @@ export default function PrivateChatPage() {
             <button
               onClick={() => {
                 const peer = otherMembers[0].user;
-                useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'video');
+                useCallStore.getState().startCall(peer.id, peer.nickname || peer.username, peer.avatarUrl, 'video', session.id);
               }}
               className="p-2 hover:bg-border rounded-lg transition-colors"
               title={t('chat.videoCall')}
@@ -430,12 +448,43 @@ export default function PrivateChatPage() {
             </>
           ) : (
             <>
-              <FileUploadPanel onUpload={handleFileUpload} />
-              <div className="flex-1 min-w-0">
-                <RichTextEditor
+              <div className="flex-1 min-w-0 relative">
+                <textarea
+                  className="input-field resize-none min-h-[44px] max-h-32 w-full"
+                  rows={1}
+                  placeholder={replyTo ? t('chat.replyTo') : t('chat.typeMessage')}
                   value={input}
-                  onChange={(text) => {
+                  onChange={(e) => {
+                    const text = e.target.value;
                     setInput(text);
+                    // ── @mention detection ──
+                    const lastAt = text.lastIndexOf('@');
+                    if (lastAt !== -1) {
+                      const beforeAt = lastAt === 0 ? ' ' : text[lastAt - 1];
+                      if (beforeAt === ' ' || beforeAt === '\n') {
+                        lastAtPosRef.current = lastAt;
+                        const afterAt = text.slice(lastAt + 1);
+                        const wordEnd = afterAt.search(/\s/);
+                        const query = wordEnd === -1 ? afterAt : afterAt.slice(0, wordEnd);
+                        setMentionQuery(query);
+                        const q = query.toLowerCase();
+                        mentionFilteredRef.current = mentionUsersRef.current.filter(
+                          (m) =>
+                            m.username.toLowerCase().includes(q) ||
+                            (m.nickname && m.nickname.toLowerCase().includes(q)),
+                        );
+                        setMentionOpen(true);
+                        setMentionSelectedIndex(0);
+                        // Position dropdown above the textarea
+                        const textarea = e.target as HTMLTextAreaElement;
+                        const rect = textarea.getBoundingClientRect();
+                        setMentionPosition({ top: rect.top - 8, left: rect.left + 12 });
+                      } else {
+                        setMentionOpen(false);
+                      }
+                    } else {
+                      setMentionOpen(false);
+                    }
                     // Typing indicator
                     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
                     if (sessionId) sendTyping(sessionId, true);
@@ -443,9 +492,74 @@ export default function PrivateChatPage() {
                       if (sessionId) sendTyping(sessionId, false);
                     }, 2000);
                   }}
-                  onSend={handleSend}
-                  placeholder={replyTo ? t('chat.replyTo') : t('chat.typeMessage')}
-                  autoFocus
+                  onKeyDown={(e) => {
+                    // ── mention dropdown keyboard nav ──
+                    if (mentionOpen) {
+                      const filtered = mentionFilteredRef.current;
+                      let newIdx = mentionSelectedIndex;
+                      switch (e.key) {
+                        case 'ArrowDown':
+                          e.preventDefault();
+                          newIdx = (mentionSelectedIndex + 1) % Math.max(filtered.length, 1);
+                          setMentionSelectedIndex(newIdx);
+                          return;
+                        case 'ArrowUp':
+                          e.preventDefault();
+                          newIdx = mentionSelectedIndex <= 0 ? Math.max(filtered.length - 1, 0) : mentionSelectedIndex - 1;
+                          setMentionSelectedIndex(newIdx);
+                          return;
+                        case 'Enter':
+                        case 'Tab':
+                          if (filtered[mentionSelectedIndex]) {
+                            e.preventDefault();
+                            const user = filtered[mentionSelectedIndex];
+                            const atPos = input.lastIndexOf('@');
+                            if (atPos !== -1) {
+                              const before = input.slice(0, atPos);
+                              const afterMatch = input.slice(atPos + 1).match(/^\S*/);
+                              const after = afterMatch ? input.slice(atPos + 1 + afterMatch[0].length) : '';
+                              setInput(`${before}@${user.username} ${after}`);
+                            }
+                            setMentionedUserIds((prev) =>
+                              prev.includes(user.id) ? prev : [...prev, user.id],
+                            );
+                            setMentionOpen(false);
+                          }
+                          return;
+                        case 'Escape':
+                          e.preventDefault();
+                          setMentionOpen(false);
+                          return;
+                      }
+                    }
+                    // Send on Enter (without Shift)
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                />
+                <MentionDropdown
+                  isOpen={mentionOpen && !!session}
+                  query={mentionQuery}
+                  members={mentionUsersRef.current}
+                  position={mentionPosition}
+                  selectedIndex={mentionSelectedIndex}
+                  onSelectedIndexChange={setMentionSelectedIndex}
+                  onSelect={(user) => {
+                    const atPos = input.lastIndexOf('@');
+                    if (atPos !== -1) {
+                      const before = input.slice(0, atPos);
+                      const afterMatch = input.slice(atPos + 1).match(/^\S*/);
+                      const after = afterMatch ? input.slice(atPos + 1 + afterMatch[0].length) : '';
+                      setInput(`${before}@${user.username} ${after}`);
+                    }
+                    setMentionedUserIds((prev) =>
+                      prev.includes(user.id) ? prev : [...prev, user.id],
+                    );
+                    setMentionOpen(false);
+                  }}
+                  onClose={() => setMentionOpen(false)}
                 />
               </div>
               <button
@@ -483,11 +597,6 @@ export default function PrivateChatPage() {
           onClose={() => setShowGroupDetail(false)}
         />
       )}
-
-      {/* Call UI */}
-      <CallController />
-      <CallNotification />
-      <CallWindow />
     </>
   );
 }

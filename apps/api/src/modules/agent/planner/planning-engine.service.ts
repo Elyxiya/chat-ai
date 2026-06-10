@@ -17,13 +17,20 @@ export class PlanningEngine {
   private readonly logger = new Logger(PlanningEngine.name);
   private readonly MAX_REACT_STEPS = 10;
   private readonly MAX_PLAN_STEPS = 20;
+  private readonly SOFT_LANDING_STEP_70: number;
+  private readonly SOFT_LANDING_STEP_90: number;
+  private readonly SOFT_LANDING_HINT_70 = '（注意：剩余步数不多，请精简推理，尽快给出最终答案。）';
+  private readonly SOFT_LANDING_HINT_90 = '（紧急：即将达到步数上限，请立即输出最终答案。）';
 
   constructor(
     private readonly llmProvider: DeepSeekProvider,
     private readonly toolRegistry: ToolRegistry,
     private readonly memory: MemoryService,
     private readonly ragEngine: RagEngine,
-  ) {}
+  ) {
+    this.SOFT_LANDING_STEP_70 = Math.floor(this.MAX_REACT_STEPS * 0.7);
+    this.SOFT_LANDING_STEP_90 = Math.floor(this.MAX_REACT_STEPS * 0.9);
+  }
 
   async classifyIntent(input: string): Promise<IntentClassification> {
     const prompt = `分析以下用户输入，判断其类型：
@@ -115,12 +122,30 @@ export class PlanningEngine {
       }
     }
 
+    const summary = await this.buildLlmSummary(input, reasoning);
     return {
       type: 'max_steps',
-      content: '任务较为复杂，已达到最大推理步骤限制。请尝试将问题拆分为更小的部分。',
+      content: summary,
       reasoning,
-      metadata: { steps: stepCount },
+      metadata: { steps: stepCount, softLanding: true },
     };
+  }
+
+  private async buildLlmSummary(input: string, reasoning: string): Promise<string> {
+    const summaryPrompt = `基于以下推理过程，请给出最终总结：
+${reasoning}
+用户问题：${input}
+请用1-2句话简洁总结上述推理得出的结论。`;
+
+    try {
+      const summary = await this.llmProvider.chat(
+        [{ role: 'user', content: summaryPrompt }],
+        { model: 'v3', temperature: 0.3, maxTokens: 300 },
+      );
+      return summary || '任务较为复杂，已达到最大推理步骤限制。请尝试将问题拆分为更小的部分。';
+    } catch {
+      return '任务较为复杂，已达到最大推理步骤限制。请尝试将问题拆分为更小的部分。';
+    }
   }
 
   async *streamReAct(
@@ -202,8 +227,13 @@ export class PlanningEngine {
           reasoning_content: stepReasoning,
         });
       } else if (stepCount >= this.MAX_REACT_STEPS) {
-        const fallback = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
-        yield fallback;
+        // No action determined at max steps — use LLM to generate a summary
+        try {
+          const summary = await this.buildLlmSummary(input, reasoning);
+          yield summary;
+        } catch {
+          yield reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
+        }
         return;
       }
     }
@@ -286,9 +316,14 @@ export class PlanningEngine {
           reasoning_content: stepReasoning,
         });
       } else if (stepCount >= this.MAX_REACT_STEPS) {
-        // No action could be determined after max steps — use reasoning as fallback answer
-        const fallback = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
-        yield { type: 'final', data: { content: fallback, reasoning } };
+        // No action could be determined after max steps — use LLM to generate a summary
+        let summary = '';
+        try {
+          summary = await this.buildLlmSummary(input, reasoning);
+        } catch {
+          summary = reasoning.trim() || '抱歉，经过多次尝试仍无法完成您的请求。';
+        }
+        yield { type: 'final', data: { content: summary, reasoning } };
         return;
       }
     }
@@ -560,9 +595,19 @@ ${context}
 
 历史：${history}
 当前观察：${observation || '无'}
-步骤 ${step}/${this.MAX_REACT_STEPS}`,
+步骤 ${step}/${this.MAX_REACT_STEPS}${this.buildSoftLandingHint(step)}`,
       },
     ];
+  }
+
+  private buildSoftLandingHint(step: number): string {
+    if (step === this.SOFT_LANDING_STEP_90) {
+      return '\n' + this.SOFT_LANDING_HINT_90;
+    }
+    if (step === this.SOFT_LANDING_STEP_70) {
+      return '\n' + this.SOFT_LANDING_HINT_70;
+    }
+    return '';
   }
 
   private parseThought(response: string): { reasoning: string; action?: { type: 'tool' | 'final'; toolName?: string; args?: any; result?: string } } {

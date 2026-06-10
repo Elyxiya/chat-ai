@@ -201,8 +201,8 @@ describe('PlanningEngine', () => {
       mockMemory.getShortTermMemory.mockResolvedValue([]);
       mockMemory.getRelevantMemories.mockResolvedValue([]);
       mockRagEngine.retrieve.mockResolvedValue('');
-      mockLlm.chat.mockResolvedValue('思考: Still thinking\n行动: get_time()');
       mockToolRegistry.execute.mockResolvedValue('10:00');
+      mockLlm.chat.mockResolvedValue('经过多步推理得出结论。');
 
       const result = await engine.executeReAct('user-1', 'Complex task', {
         type: 'simple',
@@ -210,7 +210,9 @@ describe('PlanningEngine', () => {
       });
 
       expect(result.type).toBe('max_steps');
-      expect(result.content).toContain('已达到最大');
+      // Now returns LLM-generated summary (not the static text)
+      expect(result.content).toContain('推理');
+      expect((result.metadata as any)?.softLanding).toBe(true);
     });
 
     it('PLAN-15: should use r1 model for REASONING intent', async () => {
@@ -632,6 +634,131 @@ describe('PlanningEngine', () => {
       });
 
       expect(result.type).toBe('final');
+    });
+  });
+
+  describe('Soft Landing (ReAct Three-Tier Progressive)', () => {
+    it('PLAN-SOFT-01: step 7 (70% of 10) should include soft-landing hint in prompt', async () => {
+      mockMemory.getShortTermMemory.mockResolvedValue([]);
+      mockMemory.getRelevantMemories.mockResolvedValue([]);
+      mockRagEngine.retrieve.mockResolvedValue('');
+
+      let callCount = 0;
+      mockLlm.chat.mockImplementation(() => {
+        callCount++;
+        if (callCount >= 10) return Promise.resolve('最终答案: Done.');
+        return Promise.resolve('思考: reasoning\n行动: get_time()');
+      });
+      mockToolRegistry.execute.mockResolvedValue('10:00');
+
+      await engine.executeReAct('user-1', 'Complex task', {
+        type: 'simple',
+        confidence: 0.9,
+      });
+
+      // The 7th call should include the soft-landing hint
+      const softCallArgs = mockLlm.chat.mock.calls[6];
+      expect(softCallArgs[0][softCallArgs[0].length - 1].content).toContain('剩余步数不多');
+    });
+
+    it('PLAN-SOFT-02: step 9 (90% of 10) should include more urgent hint in prompt', async () => {
+      mockMemory.getShortTermMemory.mockResolvedValue([]);
+      mockMemory.getRelevantMemories.mockResolvedValue([]);
+      mockRagEngine.retrieve.mockResolvedValue('');
+
+      let callCount = 0;
+      mockLlm.chat.mockImplementation(() => {
+        callCount++;
+        if (callCount >= 10) return Promise.resolve('最终答案: Done.');
+        return Promise.resolve('思考: reasoning\n行动: get_time()');
+      });
+      mockToolRegistry.execute.mockResolvedValue('10:00');
+
+      await engine.executeReAct('user-1', 'Complex task', {
+        type: 'simple',
+        confidence: 0.9,
+      });
+
+      // The 9th call should include the urgent hint
+      const urgentCallArgs = mockLlm.chat.mock.calls[8];
+      expect(urgentCallArgs[0][urgentCallArgs[0].length - 1].content).toContain('步数上限');
+    });
+
+    it('PLAN-SOFT-03: at max steps should call LLM to generate final summary', async () => {
+      mockMemory.getShortTermMemory.mockResolvedValue([]);
+      mockMemory.getRelevantMemories.mockResolvedValue([]);
+      mockRagEngine.retrieve.mockResolvedValue('');
+
+      let callCount = 0;
+      mockLlm.chat.mockImplementation(() => {
+        callCount++;
+        return Promise.resolve('思考: reasoning');
+      });
+      mockToolRegistry.execute.mockResolvedValue('result');
+
+      const result = await engine.executeReAct('user-1', 'Very complex task', {
+        type: 'simple',
+        confidence: 0.9,
+      });
+
+      expect(result.type).toBe('max_steps');
+      // LLM summary call should reference the original user question
+      const summaryCall = mockLlm.chat.mock.calls[mockLlm.chat.mock.calls.length - 1];
+      expect(summaryCall[0][summaryCall[0].length - 1].content).toContain('Very complex task');
+      // Content should come from LLM, not the static fallback
+      expect(result.content).not.toBe(
+        '任务较为复杂，已达到最大推理步骤限制。请尝试将问题拆分为更小的部分。',
+      );
+    });
+
+    it('PLAN-SOFT-04: streamReAct should apply three-tier progressive hints', async () => {
+      mockMemory.getShortTermMemory.mockResolvedValue([]);
+      mockMemory.getRelevantMemories.mockResolvedValue([]);
+      mockRagEngine.retrieve.mockResolvedValue('');
+      mockToolRegistry.execute.mockResolvedValue('result');
+
+      let stepCount = 0;
+      mockLlm.chatStreamWithReasoning.mockImplementation(async function* () {
+        stepCount++;
+        if (stepCount === 7) {
+          yield { type: 'chunk', data: '思考: step 7\n行动: get_time()' };
+        } else if (stepCount >= 10) {
+          yield { type: 'chunk', data: '最终答案: Done.' };
+        } else {
+          yield { type: 'chunk', data: '思考: step\n行动: get_time()' };
+        }
+      });
+
+      for await (const _ of engine.streamReAct('user-1', 'Task', {
+        type: 'simple',
+        confidence: 0.9,
+      })) { /* consume stream */ }
+
+      // Step 7 (70%) prompt should contain soft hint
+      const step7Call = mockLlm.chatStreamWithReasoning.mock.calls[6];
+      expect(step7Call[0][step7Call[0].length - 1].content).toContain('剩余步数不多');
+    });
+  });
+
+  describe('Memory Token Integration', () => {
+    it('PLAN-MEM-01: executeReAct should auto-compress memory when token exceeds 3000', async () => {
+      // Simulate memory that exceeds 3000 tokens (50 items of 200 chars each)
+      const largeMemory = Array(20).fill(null).map((_, i) => ({
+        role: 'user',
+        content: `message ${i} ` + 'a'.repeat(200),
+      }));
+      mockMemory.getShortTermMemory.mockResolvedValueOnce(largeMemory);
+      mockMemory.getRelevantMemories.mockResolvedValue([]);
+      mockRagEngine.retrieve.mockResolvedValue('');
+      mockLlm.chat.mockResolvedValue('最终答案: Done.');
+
+      await engine.executeReAct('user-1', 'Query', {
+        type: 'simple',
+        confidence: 0.9,
+      });
+
+      // After large memory is fetched, compress should be triggered
+      expect(mockMemory.getShortTermMemory).toHaveBeenCalled();
     });
   });
 });

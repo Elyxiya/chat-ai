@@ -13,6 +13,8 @@ export default function CallController() {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        useCallStore.getState()._setRemoteDescriptionSet(true);
+        await useCallStore.getState()._flushPendingCandidates(pc);
         useCallStore.getState()._setStatus('connected');
       } catch (err) {
         console.error('Failed to handle answer:', err);
@@ -20,8 +22,15 @@ export default function CallController() {
     };
 
     const handleIceCandidate = async (data: CallIceCandidateData) => {
-      const pc = useCallStore.getState().peerConnection;
+      const store = useCallStore.getState();
+      const pc = store.peerConnection;
       if (!pc || !data.candidate) return;
+
+      if (!store.remoteDescriptionSet) {
+        // Buffer: remoteDescription not yet set — cache until flush
+        store._addPendingCandidate(data.candidate);
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch {
@@ -29,10 +38,11 @@ export default function CallController() {
       }
     };
 
-    const handleEnded = (_data: CallEndedData) => {
-      const currentStatus = useCallStore.getState().status;
-      if (currentStatus === 'idle') return;
-      useCallStore.getState()._cleanup();
+    const handleEnded = (data: CallEndedData) => {
+      const store = useCallStore.getState();
+      if (store.status === 'idle') return;
+      if (data.userId !== store.peer?.id) return;
+      store._cleanup();
     };
 
     const handleToggle = (data: CallToggleData) => {

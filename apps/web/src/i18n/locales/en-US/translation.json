@@ -62,7 +62,18 @@
     "sessionExpired": "Session expired, please sign in again",
     "wechatLoginFailed": "WeChat login failed",
     "wechatLoginInitFailed": "Failed to initiate WeChat login",
-    "errorOccurred": "An error occurred"
+    "errorOccurred": "An error occurred",
+    "errorUserNotFound": "User not found",
+    "errorWrongPassword": "Incorrect password, please try again",
+    "errorEmailExists": "This email is already registered",
+    "errorUsernameExists": "This username is already taken",
+    "errorWeakPassword": "Password is too weak — minimum 8 characters with uppercase, lowercase, and numbers",
+    "errorUsernameTooShort": "Username must be at least 3 characters",
+    "errorInvalidEmail": "Please enter a valid email address",
+    "errorNetworkError": "Network error, please check your connection and try again",
+    "errorTooManyRequests": "Too many requests, please try again later",
+    "errorServiceUnavailable": "Service temporarily unavailable, please try again later",
+    "errorUnknown": "Operation failed, please try again later"
   },
   "chat": {
     "typeMessage": "Type a message...",

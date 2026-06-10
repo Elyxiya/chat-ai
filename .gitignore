@@ -30,11 +30,16 @@ pnpm-debug.log*
 # ── IDE & Editor ────────────────────────────────────────────────
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
 .DS_Store
 Thumbs.db
+
+# ── Agent & Claude ─────────────────────────────────────────────
+.agents/
+.claude/
 
 # ── Test & Coverage ────────────────────────────────────────────
 coverage/
@@ -49,6 +54,9 @@ coverage/
 
 # ── Docker & DevOps ────────────────────────────────────────────
 .docker/
+
+# ── Docs (generated / internal) ─────────────────────────────────
+docs/项目核心功能介绍/
 
 # ── Temporary / Cache ─────────────────────────────────────────
 .cache/

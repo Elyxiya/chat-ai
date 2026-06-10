@@ -11,6 +11,7 @@ export class NotificationService {
   ) {}
 
   async create(dto: CreateNotificationDto) {
+    console.log(`[NotificationService] create — dto:`, JSON.stringify(dto));
     const notification = await this.prisma.notification.create({
       data: {
         userId: dto.userId,
@@ -77,9 +78,18 @@ export class NotificationService {
   }
 
   async findUnread(userId: string) {
-    return this.prisma.notification.count({
-      where: { userId, readAt: null },
-    });
+    console.log(`[NotificationService] findUnread — userId: ${userId}`);
+    console.log(`[NotificationService] prisma.notification.fields:`, Object.keys(this.prisma.notification.fields || {}));
+    try {
+      const count = await this.prisma.notification.count({
+        where: { userId, isRead: false },
+      });
+      console.log(`[NotificationService] findUnread — count: ${count}`);
+      return count;
+    } catch (err) {
+      console.error(`[NotificationService] findUnread — ERROR:`, err.message);
+      throw err;
+    }
   }
 
   /** 拉取指定时间之后的未读通知（用于上线时同步离线期间的@all等） */
@@ -91,7 +101,7 @@ export class NotificationService {
     return this.prisma.notification.findMany({
       where: {
         userId,
-        readAt: null,
+        isRead: false,
         createdAt: { gt: sinceDate },
       },
       orderBy: { createdAt: 'desc' },

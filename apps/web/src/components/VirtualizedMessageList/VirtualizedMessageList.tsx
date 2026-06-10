@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react';
 import { VariableSizeList as List } from 'react-window';
 import { ChatMessage } from '@/types';
 import MessageBubble from '@/components/MessageBubble/MessageBubble';
@@ -25,6 +25,71 @@ interface VirtualizedMessageListProps {
 
 const ROW_ESTIMATED_SIZE = 120;
 const SCROLL_BOTTOM_THRESHOLD = 20;
+
+interface RowData {
+  messages: ChatMessage[];
+  userId: string | null;
+  onReply: ((msg: ChatMessage) => void) | undefined;
+  onForward: ((messageId: string) => void) | undefined;
+  onBookmark: ((messageId: string) => void) | undefined;
+  onReaction: ((messageId: string, emoji: string) => void) | undefined;
+  onEdit: ((msg: ChatMessage) => void) | undefined;
+  bookmarkedIds: Set<string> | undefined;
+  sessionMembersCount: number | undefined;
+  batchMode: boolean | undefined;
+  selectedIds: Set<string> | undefined;
+  onToggleSelect: ((messageId: string) => void) | undefined;
+}
+
+/** Stable row renderer — receives data via react-window's itemData prop.
+ *  Defined outside the parent component so its reference never changes,
+ *  preventing react-window from unmounting/remounting all visible rows. */
+const RowRenderer = memo(function RowRenderer({
+  data,
+  index,
+  style,
+}: {
+  data: RowData;
+  index: number;
+  style: React.CSSProperties;
+}) {
+  const msg = data.messages[index];
+  if (!msg) return null;
+
+  const isSelected = data.selectedIds?.has(msg.id);
+
+  return (
+    <div
+      style={style}
+      className={`px-5 flex items-start gap-2 ${data.batchMode ? 'cursor-pointer' : ''}`}
+      onClick={data.batchMode && data.onToggleSelect ? () => data.onToggleSelect(msg.id) : undefined}
+    >
+      {data.batchMode && (
+        <div className="flex-shrink-0 pt-4">
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            readOnly
+            className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <MessageBubble
+          message={msg}
+          isOwn={msg.senderId === data.userId}
+          onReply={data.batchMode ? undefined : (data.onReply ? () => data.onReply(msg) : undefined)}
+          onForward={data.batchMode ? undefined : (data.onForward ? () => data.onForward(msg.id) : undefined)}
+          onBookmark={data.batchMode ? undefined : (data.onBookmark ? () => data.onBookmark(msg.id) : undefined)}
+          onReaction={data.batchMode ? undefined : (data.onReaction ? (emoji) => data.onReaction(msg.id, emoji) : undefined)}
+          onEdit={data.batchMode ? undefined : (data.onEdit ? () => data.onEdit(msg) : undefined)}
+          bookmarked={data.bookmarkedIds?.has(msg.id)}
+          sessionMembersCount={data.sessionMembersCount}
+        />
+      </div>
+    </div>
+  );
+});
 
 function getItemHeight(message: ChatMessage): number {
   if (message.contentType === 'image' || message.contentType === 'video') return 360;
@@ -147,41 +212,24 @@ export default function VirtualizedMessageList({
     }
   }, [messages.length]);
 
-  const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const msg = messages[index];
-    const isSelected = selectedIds?.has(msg.id);
-    return (
-      <div
-        style={style}
-        className={`px-5 flex items-start gap-2 ${batchMode ? 'cursor-pointer' : ''}`}
-        onClick={batchMode && onToggleSelect ? () => onToggleSelect(msg.id) : undefined}
-      >
-        {batchMode && (
-          <div className="flex-shrink-0 pt-4">
-            <input
-              type="checkbox"
-              checked={!!isSelected}
-              readOnly
-              className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500"
-            />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <MessageBubble
-            message={msg}
-            isOwn={msg.senderId === userId}
-            onReply={batchMode ? undefined : (onReply ? () => onReply(msg) : undefined)}
-            onForward={batchMode ? undefined : (onForward ? () => onForward(msg.id) : undefined)}
-            onBookmark={batchMode ? undefined : (onBookmark ? () => onBookmark(msg.id) : undefined)}
-            onReaction={batchMode ? undefined : (onReaction ? (emoji) => onReaction(msg.id, emoji) : undefined)}
-            onEdit={batchMode ? undefined : (onEdit ? () => onEdit(msg) : undefined)}
-            bookmarked={bookmarkedIds?.has(msg.id)}
-            sessionMembersCount={sessionMembersCount}
-          />
-        </div>
-      </div>
-    );
-  }, [messages, userId, onReply, onForward, onBookmark, onReaction, onEdit, bookmarkedIds, sessionMembersCount, batchMode, selectedIds, onToggleSelect]);
+  /** itemData bundles all dynamic data so RowRenderer stays a stable reference. */
+  const itemData = useMemo<RowData>(() => ({
+    messages,
+    userId: userId ?? null,
+    onReply,
+    onForward,
+    onBookmark,
+    onReaction,
+    onEdit,
+    bookmarkedIds,
+    sessionMembersCount,
+    batchMode,
+    selectedIds,
+    onToggleSelect,
+  }), [
+    messages, userId, onReply, onForward, onBookmark, onReaction, onEdit,
+    bookmarkedIds, sessionMembersCount, batchMode, selectedIds, onToggleSelect,
+  ]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
@@ -193,11 +241,13 @@ export default function VirtualizedMessageList({
             width={containerWidth}
             itemCount={messages.length}
             itemSize={getSize}
+            itemData={itemData}
+            itemKey={(index, data: RowData) => data.messages[index]?.id || index}
             estimatedItemSize={ROW_ESTIMATED_SIZE}
             onScroll={handleScroll}
             overscanCount={5}
           >
-            {Row}
+            {RowRenderer}
           </List>
 
           {typingIndicator && (

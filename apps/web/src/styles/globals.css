@@ -127,11 +127,11 @@
   }
 
   /* Theme transitions — enabled after page load to avoid flash */
-  html.theme-ready {
+  /* Applied only to html/body to prevent every DOM element from animating
+     on mount, which caused visible flickering in the chat message list. */
+  html.theme-ready,
+  html.theme-ready body {
     transition: background-color 0.15s ease;
-  }
-  html.theme-ready * {
-    transition: background-color 0.2s ease, border-color 0.15s ease, color 0.2s ease;
   }
 
   ::selection {

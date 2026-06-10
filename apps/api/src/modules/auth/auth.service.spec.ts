@@ -3,7 +3,7 @@ import { ConflictException, UnauthorizedException, BadRequestException, NotFound
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { AuthService } from './auth.service';
+import { AuthService, InvalidCredentialsException } from './auth.service';
 import { RedisService } from '../common/redis.service';
 import { PrismaService } from '../../config/prisma.service';
 import { makeUser, makeRefreshToken } from '../../test/factories/entities.factory';
@@ -124,26 +124,22 @@ describe('AuthService', () => {
       const result = await service.validateUser('testuser', 'Password123');
 
       expect(result).not.toBeNull();
-      expect(result!.id).toBe('user-1');
-      expect(result!.username).toBe('testuser');
+      expect(result.id).toBe('user-1');
+      expect(result.username).toBe('testuser');
     });
 
-    it('AUTH-SVC-04: should return null for invalid password', async () => {
+    it('AUTH-SVC-04: should throw InvalidCredentialsException for wrong password', async () => {
       const mockUser = makeUser({ id: 'user-1', username: 'testuser' });
       mockPrisma.user.findFirst.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      const result = await service.validateUser('testuser', 'WrongPassword');
-
-      expect(result).toBeNull();
+      await expect(service.validateUser('testuser', 'WrongPassword')).rejects.toThrow(InvalidCredentialsException);
     });
 
-    it('should return null when user not found', async () => {
+    it('should throw InvalidCredentialsException when user not found', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
 
-      const result = await service.validateUser('nonexistent', 'Password123');
-
-      expect(result).toBeNull();
+      await expect(service.validateUser('nonexistent', 'Password123')).rejects.toThrow(InvalidCredentialsException);
     });
   });
 
@@ -555,7 +551,7 @@ describe('AuthService', () => {
       const result = await service.validateUser('test@example.com', 'Password123');
 
       expect(result).not.toBeNull();
-      expect(result!.id).toBe('user-1');
+      expect(result.id).toBe('user-1');
     });
 
     it('EDGE-AUTH-03: should handle case-insensitive email in registration', async () => {

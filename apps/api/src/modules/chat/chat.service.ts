@@ -279,6 +279,30 @@ export class ChatService {
       }
     }
 
+    // ── 服务器端解析 @username 提及 ────────────────────────────────
+    // 从消息内容中提取 @xxx 模式，排除已处理的 @all/@everyone
+    const mentionedUsernames = this.extractMentionedUsernames(dto.content);
+    if (mentionedUsernames.length > 0) {
+      try {
+        const members = await this.prisma.chatSessionMember.findMany({
+          where: { sessionId },
+          include: { user: { select: { id: true, username: true } } },
+        });
+        const usernameToId = new Map<string, string>();
+        for (const m of members) {
+          usernameToId.set(m.user.username.toLowerCase(), m.user.id);
+        }
+        const resolvedFromContent = mentionedUsernames
+          .map((name) => usernameToId.get(name.toLowerCase()))
+          .filter((id): id is string => !!id);
+
+        // 合并显式传入的 mentions + 内容解析的 mentions，去重
+        dto.mentions = [...new Set([...(dto.mentions || []), ...resolvedFromContent])];
+      } catch (err: any) {
+        this.logger.warn(`Failed to parse @username mentions: ${err.message}`);
+      }
+    }
+
     const message = await this.prisma.message.create({
       data: {
         sessionId,
@@ -347,6 +371,22 @@ export class ChatService {
     }
 
     return message as unknown as MessageWithSender;
+  }
+
+  /**
+   * Extract @mentioned usernames from message content (excluding @all/@everyone).
+   */
+  private extractMentionedUsernames(content: string): string[] {
+    const usernames: string[] = [];
+    const regex = /\B@([a-zA-Z0-9_一-鿿]+)\b/g;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const name = match[1];
+      if (name.toLowerCase() !== 'all' && name.toLowerCase() !== 'everyone') {
+        usernames.push(name);
+      }
+    }
+    return usernames;
   }
 
   async forwardMessage(userId: string, messageId: string, targetSessionIds: string[]) {

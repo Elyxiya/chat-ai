@@ -14,12 +14,12 @@ interface BatchEntry {
 }
 
 /**
- * BullMQ processor for chat:messages queue.
+ * BullMQ processor for chat-messages queue.
  *
  * Batches incoming messages and writes them in bulk using raw SQL
  * INSERT ... RETURNING, then broadcasts to the session room in seq order.
  */
-@Processor('chat:messages')
+@Processor('chat-messages')
 export class ChatQueueProcessor extends WorkerHost {
   private readonly logger = new Logger(ChatQueueProcessor.name);
   private batch: BatchEntry[] = [];
@@ -175,7 +175,7 @@ export class ChatQueueProcessor extends WorkerHost {
   async getWaitingCount(): Promise<number> {
     try {
       const counts = await this.prisma.$queryRawUnsafe(
-        `SELECT COUNT(*)::int AS cnt FROM bullmq_jobs WHERE queue = 'chat:messages' AND status = 'waiting'`,
+        `SELECT COUNT(*)::int AS cnt FROM bullmq_jobs WHERE queue = 'chat-messages' AND status = 'waiting'`,
       );
       return (counts as any[])?.[0]?.cnt || 0;
     } catch {
